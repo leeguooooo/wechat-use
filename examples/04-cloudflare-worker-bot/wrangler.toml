@@ -1,0 +1,13 @@
+name = "wechat-skill-bot-example"
+main = "src/index.ts"
+compatibility_date = "2026-04-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Secrets (set via `wrangler secret put`; never hard-code here):
+#   WECHAT_USER_TOKEN   — from `wechat auth status`
+#   WECHAT_MACHINE_ID   — from `wechat auth status`
+#   TARGET_WXID         — the wxid to send the demo message to
+
+# Non-secret env var with a safe default:
+[vars]
+PROFILE_API_URL = "https://wxp.leeguoo.com"

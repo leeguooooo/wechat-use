@@ -1,0 +1,40 @@
+name = "wechat-skill-saas-orchestrate"
+main = "src/index.ts"
+compatibility_date = "2026-04-01"
+compatibility_flags = ["nodejs_compat"]
+
+# ─── D1 database ──────────────────────────────────────────────────────────────
+# 1. Create your D1:  wrangler d1 create wechat-orchestrate-db
+# 2. Copy the database_id from the output and paste it below.
+[[d1_databases]]
+binding = "DB"
+database_name = "wechat-orchestrate-db"
+database_id = "REPLACE_WITH_YOUR_DATABASE_ID"
+
+# ─── Migrations ───────────────────────────────────────────────────────────────
+# After filling database_id, run:
+#   wrangler d1 migrations apply wechat-orchestrate-db
+# For local dev:
+#   wrangler d1 migrations apply wechat-orchestrate-db --local
+
+# ─── Non-secret env vars ──────────────────────────────────────────────────────
+[vars]
+# Lease duration in seconds (default 60s per spec)
+LEASE_SECONDS = "60"
+# Maximum number of retry attempts before hard-failing a row
+MAX_ATTEMPTS = "5"
+
+# ─── Secrets (set via `wrangler secret put`) ──────────────────────────────────
+# BOT_API_TOKEN     — single bearer token for minimal deployment.
+#                     For multi-tenant, use D1 bot_api_tokens table instead.
+#                     See src/auth.ts for the upgrade path.
+#
+# WEBHOOK_SECRET    — shared secret for HMAC-SHA256 inbound signature
+#                     verification (X-Wechat-Signature header).
+#                     Generate with: openssl rand -hex 32
+
+# ─── Cron triggers ────────────────────────────────────────────────────────────
+# Reset expired claimed rows back to pending (visibility timeout).
+# CF Workers free plan allows up to 5 cron triggers.
+[triggers]
+crons = ["* * * * *"]
