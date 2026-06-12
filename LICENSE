@@ -1,0 +1,85 @@
+wechat-use / wechat-cli
+Copyright (c) 2026 leeguooooo
+
+                          NON-COMMERCIAL LEARNING LICENSE
+                              Version 1.0 — 2026-04-20
+
+1. DEFINITIONS
+
+   "Software" means the wechat-cli binary, the SKILL.md skill definition, the
+   install scripts, and any accompanying documentation in the wechat-use
+   repository (https://github.com/leeguooooo/wechat-use).
+
+   "You" means the individual or entity exercising permissions granted by this
+   license.
+
+   "Commercial Use" means any use, reproduction, or distribution that is
+   primarily intended for or directed toward commercial advantage or monetary
+   compensation, including but not limited to:
+   - Selling access to the Software or services built on it
+   - Using the Software to send messages on behalf of paying customers
+   - Incorporating the Software into a commercial product or SaaS offering
+   - Running the Software in any revenue-generating pipeline
+
+2. GRANT
+
+   You are granted a limited, non-exclusive, non-transferable, royalty-free
+   license to use, study, and modify the Software for:
+   - Personal learning and research
+   - Non-commercial evaluation of reverse-engineering techniques
+   - Non-commercial automation of your OWN WeChat account
+
+3. RESTRICTIONS
+
+   You MAY NOT:
+
+   a. Use the Software for any Commercial Use.
+   b. Distribute the Software or modified versions to third parties, whether
+      gratis or for fee, without prior written permission.
+   c. Use the Software to send spam, harassment, or any messages the recipient
+      has not consented to receive.
+   d. Use the Software to automate WeChat accounts that do not belong to you.
+   e. Use the Software in ways that violate Tencent's WeChat Terms of Service
+      or any applicable laws in your jurisdiction.
+   f. Reverse engineer, decompile, or attempt to recover the Software's source
+      code for the purpose of re-distribution.
+
+4. NO WARRANTY — USE AT YOUR OWN RISK
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT.
+
+   IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING
+   FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+   DEALINGS IN THE SOFTWARE.
+
+   SPECIFICALLY, THE AUTHOR IS NOT RESPONSIBLE FOR:
+   - Loss of WeChat account access (including bans, suspensions, or rate limits)
+   - Data loss, message delivery failures, or misdirected messages
+   - Damage to any system caused by running the Software
+   - Compatibility breaks when WeChat updates its binaries
+   - Any consequences of the Software's interaction with other software
+
+5. TERMINATION
+
+   This license terminates automatically if You violate any of its terms. Upon
+   termination, You must cease all use and delete all copies of the Software.
+
+6. ETHICS REMINDER
+
+   This Software automates the user's OWN WeChat account on their own
+   machine for personal research / personal-automation. It is intended for
+   researchers and curious users within reasonable personal-use limits.
+   Please use it respectfully.
+
+7. NO COMMERCIAL LICENSING — NO EXCEPTIONS
+
+   The author does NOT offer any form of commercial license, paid tier,
+   enterprise version, bulk distribution, or paid support. Inquiries on
+   commercial use, pricing, licensing fees, or any form of paid
+   arrangement will not be answered. There are no exceptions to this
+   clause; do not contact the author with commercial proposals.
+
+   See DISCLAIMER.md §7 for the binding non-commercial pledge.
