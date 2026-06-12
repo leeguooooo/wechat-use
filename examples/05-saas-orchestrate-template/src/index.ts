@@ -1,5 +1,5 @@
 /**
- * wechat-skill v1.12 SaaS orchestrate template
+ * wechat-use v1.12 SaaS orchestrate template
  *
  * Entry point — mounts all 4 protocol endpoints + cron lease-reset handler.
  *

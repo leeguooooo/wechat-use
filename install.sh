@@ -5,7 +5,7 @@
 # Example: INSTALL_DIR=/usr/local/bin ./install.sh  (will use sudo if needed)
 set -euo pipefail
 
-REPO="leeguooooo/wechat-skill"
+REPO="leeguooooo/wechat-use"
 BINS=(wechat wechatd wechat-bridge wechat-wechaty-gateway)
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 
@@ -495,6 +495,20 @@ for BIN_NAME in "${BINS[@]}"; do
 done
 echo ""
 
+# wechat-use 是新的主命令名（与 profile-use / iphone-use / chrome-use 同系列）。
+# 实际二进制仍叫 `wechat`，这里建一个 `wechat-use` → `wechat` 软链，两个名字等价。
+# 旧脚本 / 文档里的 `wechat ...` 继续可用，新文档统一用 `wechat-use ...`。
+WECHAT_USE_LINK="${INSTALL_DIR}/wechat-use"
+if [[ -w "${INSTALL_DIR}" ]]; then
+  rm -f "${WECHAT_USE_LINK}"
+  ln -s wechat "${WECHAT_USE_LINK}"
+else
+  sudo rm -f "${WECHAT_USE_LINK}"
+  sudo ln -s wechat "${WECHAT_USE_LINK}"
+fi
+success "已建立别名:${WECHAT_USE_LINK} → wechat（wechat-use 与 wechat 等价）"
+echo ""
+
 # v1.16.4 REVERT: cleanup remnants of the v1.16.0–v1.16.3 .app bundle
 # approach. The install loop already replaced ~/.local/bin/{wechatd,
 # wechat-bridge} symlinks with regular files; here we (a) remove the
@@ -915,7 +929,7 @@ echo ""
 # Auto-add INSTALL_DIR to PATH if missing. Idempotent: only inserts if
 # the rc file doesn't already reference the directory.
 path_export_line() {
-  printf 'export PATH="%s:$PATH"  # added by wechat-skill installer' "${1}"
+  printf 'export PATH="%s:$PATH"  # added by wechat-use installer' "${1}"
 }
 
 _rc_already_covers_install_dir() {
@@ -962,7 +976,7 @@ ensure_fish_has_path() {
   if _rc_already_covers_install_dir "$fish_conf" "$install_dir"; then
     return 2
   fi
-  printf '\n# added by wechat-skill installer\nfish_add_path %s\n' "$install_dir" >> "$fish_conf"
+  printf '\n# added by wechat-use installer\nfish_add_path %s\n' "$install_dir" >> "$fish_conf"
   return 0
 }
 
@@ -1059,7 +1073,7 @@ printf '    %s查激活状态 + 剩余天数。到期后 `wechat auth renew` 看
 step "$(cmd 'wechat doctor')  ${C_DIM}（任何时候出问题先跑这个）${C_RESET}"
 
 # ─────────────────────────────────────────────────────────────────────
-# 可选：装 wechat-skill 进 Claude Code / Codex / Cursor 等 agent runner
+# 可选：装 wechat-use 进 Claude Code / Codex / Cursor 等 agent runner
 # ─────────────────────────────────────────────────────────────────────
 #
 # 装好 CLI 之后,大部分用户立刻就会想"接 AI agent"。如果检测到 Claude
@@ -1074,8 +1088,8 @@ printf '\n%s—— 接 AI agent (可选) ——%s\n\n' "${C_BOLD}" "${C_RESET}"
 # Codex / Cursor / Claude Desktop 等读这个目录的 agent runner 都会用到。
 # 所以我们只检测 npx 是否能跑,不挑 agent —— 装上谁用谁的事。
 if command -v npx >/dev/null 2>&1; then
-  SKILL_CMD="npx -y skills add leeguooooo/wechat-skill -y -g"
-  info "检测到 npx,可以一键装 wechat-skill 进 ~/.agents/skills/"
+  SKILL_CMD="npx -y skills add leeguooooo/wechat-use -y -g"
+  info "检测到 npx,可以一键装 wechat-use 进 ~/.agents/skills/"
   printf '    %s任何读这个目录的 agent(Claude Code / Codex / Cursor / Claude Desktop / …)%s\n' "${C_DIM}" "${C_RESET}"
   printf '    %s下次启动自动学会 sessions / history / send / sent 等全部命令%s\n' "${C_DIM}" "${C_RESET}"
   printf '    %s命令:%s %s\n\n' "${C_DIM}" "${C_RESET}" "$(cmd "$SKILL_CMD")"
@@ -1098,7 +1112,7 @@ if command -v npx >/dev/null 2>&1; then
     *)
       info "装 skill 中…(npx 第一次跑会拉 ~5MB 包,可能要 10-30s)"
       if $SKILL_CMD; then
-        success "wechat-skill 已装到 ~/.agents/skills/wechat-skill/。下次 agent 启动自动加载。"
+        success "wechat-use 已装到 ~/.agents/skills/wechat-use/。下次 agent 启动自动加载。"
       else
         warn "skill 安装失败。可以手动重试上面的命令;不影响 CLI 本身工作。"
       fi
@@ -1107,6 +1121,6 @@ if command -v npx >/dev/null 2>&1; then
 else
   info "未检测到 npx(需要 Node.js)。"
   printf '    %s如果你用 Claude Code / Codex / Cursor 等 agent,装好 Node.js 后跑:%s\n' "${C_DIM}" "${C_RESET}"
-  printf '    %s%s\n' "  " "$(cmd 'npx -y skills add leeguooooo/wechat-skill -y -g')"
+  printf '    %s%s\n' "  " "$(cmd 'npx -y skills add leeguooooo/wechat-use -y -g')"
   printf '\n'
 fi

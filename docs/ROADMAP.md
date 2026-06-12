@@ -2,13 +2,13 @@
 
 ## 在做 / 即将做
 
-- **发图片 / 文件**：`wechat send --image <path>` / `--file <path>`
+- **发图片 / 文件**：`wechat-use send --image <path>` / `--file <path>`
 - **非文本消息解析（listen 侧）**：当前 XML `appmsg` / 引用 / 图片消息出原始 XML，要二次解析提 title / url
 <!-- 此条目已删除 (2026-05-19):本项目永久免费,作者不接受任何形式付款。详见 DISCLAIMER §7。 -->
 
 ## 已完成（最近）
 
-- ✅ v1.12.0 `wechat orchestrate` —— SaaS outbox/webhook 接入（NAT-friendly，不需公网 IP / 域名）
+- ✅ v1.12.0 `wechat-use orchestrate` —— SaaS outbox/webhook 接入（NAT-friendly，不需公网 IP / 域名）
 - ✅ v1.11.1 远程 gateway via Cloudflare Tunnel + ES256 JWT（同步直连场景）
 - ✅ v1.10.32 wechaty Puppet gRPC gateway —— 真号 wechaty macOS 协议
 - ✅ v1.9.1 激活码 + 审核制 + 自动从服务端拉新版本 profile（Tencent 热更不用重发 release）

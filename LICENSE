@@ -1,4 +1,4 @@
-wechat-skill / wechat-cli
+wechat-use / wechat-cli
 Copyright (c) 2026 leeguooooo
 
                           NON-COMMERCIAL LEARNING LICENSE
@@ -7,8 +7,8 @@ Copyright (c) 2026 leeguooooo
 1. DEFINITIONS
 
    "Software" means the wechat-cli binary, the SKILL.md skill definition, the
-   install scripts, and any accompanying documentation in the wechat-skill
-   repository (https://github.com/leeguooooo/wechat-skill).
+   install scripts, and any accompanying documentation in the wechat-use
+   repository (https://github.com/leeguooooo/wechat-use).
 
    "You" means the individual or entity exercising permissions granted by this
    license.

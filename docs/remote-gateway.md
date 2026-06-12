@@ -1,6 +1,6 @@
 # 远程 Gateway（v1.11）
 
-> **适用版本：wechat-skill ≥ v1.11**
+> **适用版本：wechat-use ≥ v1.11**
 
 v1.11 起可以把本机微信的 REST 桥通过 Cloudflare Tunnel 安全暴露给远程服务（CF Worker、SaaS 后端、服务器脚本等）。
 
@@ -49,7 +49,7 @@ wechatd daemon  →  WeChat.app（本地进程）
 
 ```bash
 # 必须提供 --hostname，必须是你 CF 账号下已加入的 zone 的子域名
-wechat tunnel setup --hostname wechat.yourdomain.com
+wechat-use tunnel setup --hostname wechat.yourdomain.com
 ```
 
 命令会：
@@ -133,7 +133,7 @@ Cloudflare Worker 可以用 `cache.put` / `cache.match` 缓存 JWT（key 用 `ma
 ### 如何获取 user_token 和 machine_id
 
 ```bash
-wechat auth status
+wechat-use auth status
 ```
 
 输出里找 `user_token`（形如 `wxp_tok_...`）和 `machine_id`（形如 `mac-...`）。
@@ -155,7 +155,7 @@ wechat auth status
 
 ## Cloudflare Worker 接入示例
 
-完整可跑示例在 [wechat-skill-examples/examples/04-cloudflare-worker-bot](https://github.com/leeguooooo/wechat-skill-examples/tree/main/examples/04-cloudflare-worker-bot)。
+完整可跑示例在 [wechat-use-examples/examples/04-cloudflare-worker-bot](https://github.com/leeguooooo/wechat-use-examples/tree/main/examples/04-cloudflare-worker-bot)。
 
 核心逻辑（TypeScript）：
 
@@ -196,7 +196,7 @@ const sendResp = await fetch(`https://${tunnel_url}/v1/send`, {
 
 **tunnel setup 卡住 / OAuth 失败**
 
-→ 检查 `cloudflared` 是否在 PATH 里。`wechat tunnel setup` 会尝试自动下载，若网络受限需手动安装：https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/
+→ 检查 `cloudflared` 是否在 PATH 里。`wechat-use tunnel setup` 会尝试自动下载，若网络受限需手动安装：https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/
 
 **REST 桥返回 401**
 
@@ -204,16 +204,16 @@ const sendResp = await fetch(`https://${tunnel_url}/v1/send`, {
 
 **REST 桥返回 402**
 
-→ 激活码过期或不存在。跑 `wechat auth status` 查剩余天数，到期后重新申请。
+→ 激活码过期或不存在。跑 `wechat-use auth status` 查剩余天数，到期后重新申请。
 
 **Tunnel URL 变了**
 
-→ 每次 `wechat tunnel setup --hostname <same-hostname>` 用同一个 machine-id 会复用同一个 tunnel（named tunnel 不变）；重跑不会产生新 UUID。
+→ 每次 `wechat-use tunnel setup --hostname <same-hostname>` 用同一个 machine-id 会复用同一个 tunnel（named tunnel 不变）；重跑不会产生新 UUID。
 
 **`tunnel register` 报 `tunnel_probe_failed`**
 
 → profile-api 在注册时会 probe `https://<hostname>/health` 验证是真实的 wechat-wechaty-gateway。确认：(1) `cloudflared` 进程正在运行；(2) DNS 已传播（`dig wechat.yourdomain.com` 能解析到 Cloudflare IP）；(3) `curl https://wechat.yourdomain.com/health` 能返回 `{"service":"wechat-wechaty-gateway",...}`。
 
-**`wechat doctor` 怎么看 tunnel 状态**
+**`wechat-use doctor` 怎么看 tunnel 状态**
 
-→ v1.11 起 `wechat doctor` 输出里有 `tunnel` 一行，显示 tunnel 进程 pid + URL + 健康状态。
+→ v1.11 起 `wechat-use doctor` 输出里有 `tunnel` 一行，显示 tunnel 进程 pid + URL + 健康状态。

@@ -1,5 +1,5 @@
 /**
- * wechat-skill Cloudflare Worker bot example (v1.11 remote gateway)
+ * wechat-use Cloudflare Worker bot example (v1.11 remote gateway)
  *
  * Flow:
  *   1. POST /gateway-token  → profile-api → get 1h JWT + tunnel URL
@@ -16,7 +16,7 @@
  */
 
 export interface Env {
-  /** wechat-skill user token (wxp_tok_...) — set via `wrangler secret put` */
+  /** wechat-use user token (wxp_tok_...) — set via `wrangler secret put` */
   WECHAT_USER_TOKEN: string;
   /** Machine ID reported by `wechat auth status` — set via `wrangler secret put` */
   WECHAT_MACHINE_ID: string;

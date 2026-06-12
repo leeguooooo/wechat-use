@@ -7,15 +7,15 @@
 
 ## 前置条件
 
-1. **wechat-skill ≥ v1.11** 已装好，Mac 上微信正在跑：
+1. **wechat-use ≥ v1.11** 已装好，Mac 上微信正在跑：
    ```bash
    wechat --version     # 确认 ≥ v1.11
-   wechat doctor        # 全绿才继续
+   wechat-use doctor        # 全绿才继续
    ```
 
 2. **一次性跑 tunnel setup**（你自己的 CF free 账号，OAuth 授权即可，需要一个 CF zone 下的 hostname）：
    ```bash
-   wechat tunnel setup --hostname wechat.yourdomain.com
+   wechat-use tunnel setup --hostname wechat.yourdomain.com
    ```
    命令会引导你完成 Cloudflare OAuth → 在你 zone 下创建 named tunnel + DNS CNAME → 启动 tunnel 进程。
    bare `<uuid>.cfargotunnel.com` 公网不路由(v1.11.0 实测踩过的坑,见 docs/remote-gateway.md),所以 `--hostname` 必填，要指向你拥有的 zone。
@@ -28,7 +28,7 @@
 
 3. **查激活 token 和 machine ID**：
    ```bash
-   wechat auth status
+   wechat-use auth status
    ```
    输出里拿：
    - `user_token`（形如 `wxp_tok_...`）→ 即 `WECHAT_USER_TOKEN`
@@ -73,12 +73,12 @@ wrangler secret put TARGET_WXID          # 粘贴目标 wxid（如 filehelper）
 wrangler deploy
 ```
 
-输出会给你 `https://wechat-skill-bot-example.<你的 CF 子域>.workers.dev`。
+输出会给你 `https://wechat-use-bot-example.<你的 CF 子域>.workers.dev`。
 
 ### 5. 触发测试
 
 ```bash
-curl https://wechat-skill-bot-example.<你的 CF 子域>.workers.dev/
+curl https://wechat-use-bot-example.<你的 CF 子域>.workers.dev/
 ```
 
 看到 `{"ok":true,...}` 且微信收到 "hello from worker" 就成了。
@@ -110,8 +110,8 @@ JWT 由 profile-api 签发，REST 桥校验，过期后 Worker 下次调用会�
 
 | 变量 | 必须 | 说明 |
 |---|---|---|
-| `WECHAT_USER_TOKEN` | ✅ | `wechat auth status` 里的 `user_token` |
-| `WECHAT_MACHINE_ID` | ✅ | `wechat auth status` 里的 `machine_id` |
+| `WECHAT_USER_TOKEN` | ✅ | `wechat-use auth status` 里的 `user_token` |
+| `WECHAT_MACHINE_ID` | ✅ | `wechat-use auth status` 里的 `machine_id` |
 | `TARGET_WXID` | ✅ | 发消息的目标 wxid（测试用 `filehelper`） |
 | `PROFILE_API_URL` | 可选 | 默认 `https://wxp.leeguoo.com` |
 
@@ -121,7 +121,7 @@ JWT 由 profile-api 签发，REST 桥校验，过期后 Worker 下次调用会�
 
 - REST 桥（`:18402`）已通过 Cloudflare Tunnel 对外暴露。  
 - **gRPC（`:18401`）不暴露** —— 远程跑 wechaty TS SDK bot 暂时只能跟 Mac 同 LAN（直连 `<mac-ip>:18401`），公网接入留 v1.12。  
-  详见 [wechat-skill docs/remote-gateway.md](https://github.com/leeguooooo/wechat-skill/blob/main/docs/remote-gateway.md)。
+  详见 [wechat-use docs/remote-gateway.md](https://github.com/leeguooooo/wechat-use/blob/main/docs/remote-gateway.md)。
 
 ---
 

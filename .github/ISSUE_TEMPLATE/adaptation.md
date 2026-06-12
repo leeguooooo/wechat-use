@@ -1,6 +1,6 @@
 ---
 name: 新 build 适配请求
-about: WeChat 升级到新 dylib 指纹,wechat send 不可用
+about: WeChat 升级到新 dylib 指纹,wechat-use send 不可用
 title: "适配请求: WeChat <版本> "
 labels: adaptation
 ---
@@ -8,7 +8,7 @@ labels: adaptation
 <!--
 🛑 提交前请阅读
 
-1. 不要直接粘贴 `wechat init` stderr 或 `wechat doctor`(非 --json)输出。
+1. 不要直接粘贴 `wechat-use init` stderr 或 `wechat-use doctor`(非 --json)输出。
    它们包含完整 dylib SHA-256 + build 号 + 验证清单,这些是 sanitization 政策红线。
    贴出后我们要花时间 redact,issue 历史也会留底。
 
@@ -20,7 +20,7 @@ labels: adaptation
 
 3. 跑这个命令拿到 redacted 输出:
    ```bash
-   wechat doctor --json | jq -c '{ok, status, version: .checks[] | select(.name == "wechat_dylib_fingerprint") | .detail}'
+   wechat-use doctor --json | jq -c '{ok, status, version: .checks[] | select(.name == "wechat_dylib_fingerprint") | .detail}'
    ```
    仅贴它的输出。完整诊断走 Telegram bot 私聊。
 
@@ -29,20 +29,20 @@ labels: adaptation
 
 ## 现象
 
-<!-- 简述哪个命令报什么错。例:`wechat send` 报 "dylib 指纹不在已验证清单中";`wechat history` 正常。 -->
+<!-- 简述哪个命令报什么错。例:`wechat-use send` 报 "dylib 指纹不在已验证清单中";`wechat-use history` 正常。 -->
 
 
 
 ## redacted doctor 输出
 
 ```
-# 粘贴 `wechat doctor --json | jq ...` 的输出(只 8 字符指纹前缀)
+# 粘贴 `wechat-use doctor --json | jq ...` 的输出(只 8 字符指纹前缀)
 ```
 
 ## 已尝试
 
 - [ ] 重装 WeChat 官方 dmg(关闭自动更新)
-- [ ] `wechat init` key 提取成功
+- [ ] `wechat-use init` key 提取成功
 - [ ] 通过 Telegram @WechatCliBot 提交了详细 doctor JSON
 
 ## 已付款被骗?(可选)

@@ -1,4 +1,4 @@
-# wechat-skill v1.12 SaaS orchestrate template
+# wechat-use v1.12 SaaS orchestrate template
 
 A minimal **Cloudflare Workers + D1** SaaS that implements the
 [v1.12 orchestrate protocol](../../docs/v1.12-orchestrate-protocol.md).
@@ -11,8 +11,8 @@ Your business code
         ↓
   D1 bot_outbox table (your CF Worker)
         ↑ poll (GET /api/wechat-outbox/claim)
-Subscriber Mac (wechat orchestrate)
-  └─ calls local wechat-skill REST → WeChat app on Mac
+Subscriber Mac (wechat-use orchestrate)
+  └─ calls local wechat-use REST → WeChat app on Mac
         ↓
   POST /api/wechat-outbox/:id/done|fail        ← Mac reports result
   POST /api/wechat-inbound                     ← Mac pushes inbound SSE events
@@ -98,18 +98,18 @@ wrangler secret put WEBHOOK_SECRET
 wrangler deploy
 ```
 
-Your Worker is live at `https://wechat-skill-saas-orchestrate.<your-subdomain>.workers.dev`.
+Your Worker is live at `https://wechat-use-saas-orchestrate.<your-subdomain>.workers.dev`.
 
 ---
 
 ## Connect a subscriber Mac
 
-On the subscriber's Mac (wechat-skill v1.12+):
+On the subscriber's Mac (wechat-use v1.12+):
 
 ```bash
-wechat orchestrate setup \
-  --outbox-url=https://wechat-skill-saas-orchestrate.<sub>.workers.dev \
-  --webhook-url=https://wechat-skill-saas-orchestrate.<sub>.workers.dev/api/wechat-inbound \
+wechat-use orchestrate setup \
+  --outbox-url=https://wechat-use-saas-orchestrate.<sub>.workers.dev \
+  --webhook-url=https://wechat-use-saas-orchestrate.<sub>.workers.dev/api/wechat-inbound \
   --bearer=<BOT_API_TOKEN value> \
   --webhook-secret=<WEBHOOK_SECRET value>
 ```
@@ -117,7 +117,7 @@ wechat orchestrate setup \
 Then start the orchestrate loop:
 
 ```bash
-wechat orchestrate start
+wechat-use orchestrate start
 ```
 
 The Mac will begin polling `GET /api/wechat-outbox/claim` every 1-5 seconds
@@ -177,7 +177,7 @@ export default {
 ```
 
 The Mac's orchestrate loop picks it up within its poll interval (1-5s) and
-calls the local wechat-skill REST endpoint to actually send.
+calls the local wechat-use REST endpoint to actually send.
 
 ---
 
@@ -197,7 +197,7 @@ if (!normalized.is_group && !normalized.from_self) {
 ```
 
 `body.normalized` has the stable 8-field subset.  For media / quote / recall
-details use `body.raw_event` (full wechat-skill SSE payload).
+details use `body.raw_event` (full wechat-use SSE payload).
 
 ---
 

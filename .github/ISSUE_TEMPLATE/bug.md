@@ -9,8 +9,8 @@ labels: bug
 🛑 提交前请阅读
 
 1. **激活码永久免费**。任何收钱方都是冒名诈骗,见过请说,**别向陌生人付款**。
-2. 别直接粘贴 `wechat init` stderr / `wechat doctor`(非 --json)输出 —— 会泄漏 build 号 / dylib SHA / 验证清单。
-3. 跑 `wechat doctor --json` 的 redacted 输出再贴。
+2. 别直接粘贴 `wechat-use init` stderr / `wechat-use doctor`(非 --json)输出 —— 会泄漏 build 号 / dylib SHA / 验证清单。
+3. 跑 `wechat-use doctor --json` 的 redacted 输出再贴。
 -->
 
 ## 现象
@@ -31,7 +31,7 @@ labels: bug
 
 ```
 # wechat --version
-# wechat doctor --json | jq -c '{ok, status}'
+# wechat-use doctor --json | jq -c '{ok, status}'
 # macOS 版本(System Settings → 关于本机)
 ```
 

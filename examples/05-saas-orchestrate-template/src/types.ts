@@ -1,5 +1,5 @@
 /**
- * wechat-skill v1.12 orchestrate protocol — shared types
+ * wechat-use v1.12 orchestrate protocol — shared types
  *
  * Mirrors the shapes defined in docs/v1.12-orchestrate-protocol.md.
  * Do not import business logic from here; keep this file data-only.

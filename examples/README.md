@@ -1,24 +1,24 @@
-# wechat-skill-examples
+# wechat-use-examples
 
-实战示例：用 [`wechat-skill`](https://github.com/leeguooooo/wechat-skill) 暴露的
+实战示例：用 [`wechat-use`](https://github.com/leeguooooo/wechat-use) 暴露的
 Wechaty Puppet gRPC gateway 写 macOS 微信机器人。
 
 ## 前置
 
 1. **macOS Apple Silicon + WeChat 4.x**（4.0.1.52 / 4.1.8 已 calibrate，其他版本可能需要重抓 offset）
-2. **wechat-skill ≥ v1.13 装好**（示例 04 需要 ≥ v1.11；建议直接用 latest）：
+2. **wechat-use ≥ v1.13 装好**（示例 04 需要 ≥ v1.11；建议直接用 latest）：
    ```bash
-   curl -fsSL https://raw.githubusercontent.com/leeguooooo/wechat-skill/main/install.sh | bash
-   wechat auth activate <你的激活码>
-   wechat init        # 抽 SQLCipher key
-   wechat send "hi" filehelper   # 首次需要在 WeChat 里手动发一条 warmup InputView
+   curl -fsSL https://raw.githubusercontent.com/leeguooooo/wechat-use/main/install.sh | bash
+   wechat-use auth activate <你的激活码>
+   wechat-use init        # 抽 SQLCipher key
+   wechat-use send "hi" filehelper   # 首次需要在 WeChat 里手动发一条 warmup InputView
    ```
 3. **跑 gateway**（默认 127.0.0.1:18401，loopback 模式不需要 bearer）：
    ```bash
    wechat-wechaty-gateway
    ```
 
-> ⚠️ **激活码 gate**：每个 wechaty 数据 RPC 都校验 `wxp_act_` 激活码（不是 transport bearer）。
+> ⚠️ **激活码 gate**：每个 wechaty 数据 RPC 都校验 `wechatuse_` 激活码（不是 transport bearer）。
 > 本机 loopback 默认信任,不需要 transport bearer。要把 gateway 暴露公网才需要加 bearer + 反代/Tailscale,见 `docs/remote-gateway.md`。
 
 ## 示例
@@ -53,7 +53,7 @@ node bot.js                 # loopback 模式不需要 bearer
 
 **`Status::Unauthenticated: missing activation`**
 
-→ 先跑 `wechat auth activate <激活码>`。激活码经人工审核**免费发放**:跟 [@WechatCliBot](https://t.me/WechatCliBot) 私聊申请,前置关注频道 [WechatCli](https://t.me/+4PuAO3lB9R82ZTVh)。详见 [DISCLAIMER](../DISCLAIMER.md)。
+→ 先跑 `wechat-use auth activate <激活码>`。激活码经人工审核**免费发放**:跟 [@WechatCliBot](https://t.me/WechatCliBot) 私聊申请,前置关注频道 [WechatCli](https://t.me/+4PuAO3lB9R82ZTVh)。详见 [DISCLAIMER](../DISCLAIMER.md)。
 
 **`Status::Unauthenticated: missing bearer token`**
 
@@ -62,7 +62,7 @@ Node 客户端的 `token` 字段不是这个 bearer，是 wechaty puppet token�
 
 **Login 5s 超时**
 
-→ 大概率 daemon 没起。先 `wechat daemon start`，再起 gateway，再起客户端。
+→ 大概率 daemon 没起。先 `wechat-use daemon start`，再起 gateway，再起客户端。
 
 **消息收到了但 `m.text()` 是 `<?xml ...>`**
 
@@ -72,8 +72,8 @@ Node 客户端的 `token` 字段不是这个 bearer，是 wechaty puppet token�
 ## 反馈
 
 - 频道：https://t.me/+4PuAO3lB9R82ZTVh
-- bot：[@WechatCliBot](https://t.me/WechatCliBot)（贴 `wechat doctor` 全输出 + 你想做的事）
+- bot：[@WechatCliBot](https://t.me/WechatCliBot)（贴 `wechat-use doctor` 全输出 + 你想做的事）
 
 ## License
 
-MIT。本仓库**只**有示例代码。`wechat-skill` 自身（含 LLDB / SQLCipher key 抽取）保持私有协议。
+MIT。本仓库**只**有示例代码。`wechat-use` 自身（含 LLDB / SQLCipher key 抽取）保持私有协议。

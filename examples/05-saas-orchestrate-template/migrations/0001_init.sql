@@ -1,4 +1,4 @@
--- wechat-skill v1.12 orchestrate protocol — minimal D1 schema
+-- wechat-use v1.12 orchestrate protocol — minimal D1 schema
 -- Run: wrangler d1 migrations apply wechat-orchestrate-db [--local]
 
 -- ─── Outbox ───────────────────────────────────────────────────────────────────
@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS bot_outbox (
   -- State machine: pending | claimed | done | failed
   status           TEXT    NOT NULL DEFAULT 'pending',
 
-  -- Idempotency: SaaS writes a stable key; Mac passes it to wechat-skill /v1/send
+  -- Idempotency: SaaS writes a stable key; Mac passes it to wechat-use /v1/send
   -- to prevent double-sends on retry.  Defaults to the row id if not supplied.
   idempotency_key  TEXT    NOT NULL,
 
@@ -32,8 +32,8 @@ CREATE TABLE IF NOT EXISTS bot_outbox (
   last_error_msg   TEXT,
 
   -- Completion receipts (from POST /done)
-  send_message_id      TEXT,           -- wechat-skill server_id (may be NULL for old clients)
-  delivered_verified   INTEGER,        -- 1 = wechat-skill confirmed DB write
+  send_message_id      TEXT,           -- wechat-use server_id (may be NULL for old clients)
+  delivered_verified   INTEGER,        -- 1 = wechat-use confirmed DB write
   completed_at         TEXT,           -- ISO-8601 UTC
 
   created_at       TEXT    NOT NULL,   -- ISO-8601 UTC
@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS wechat_inbound_events (
   from_self             INTEGER,       -- 1 = sent by the subscriber themselves
 
   -- Full raw payload stored as JSON text for business logic that needs it
-  raw_event        TEXT                -- JSON blob, wechat-skill SSE payload
+  raw_event        TEXT                -- JSON blob, wechat-use SSE payload
 );
 
 -- Common query: all unhandled mentions in a group

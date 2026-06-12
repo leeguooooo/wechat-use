@@ -1,9 +1,17 @@
-# wechat-skill
+# wechat-use
 
 把 macOS 上的微信变成给 AI agent / bot 用的**本地 API**。
 不上云、不上 iPad 协议、纯本地实现,数据只在你这台 Mac 上动。
 
-> **支持微信 4.0.x / 4.1.x 系列**。具体版本兼容矩阵以 `wechat doctor` 输出为准;WeChat 热更后通过 profile API 推送适配数据,**无需重发 release**。
+> `wechat-use` 是 **`*-use` 系列**的一员——让 AI agent 直接操作你本地真实工具 / 设备:
+> [`profile-use`](https://github.com/leeguooooo/profile-use)(本地个人资料填表) ·
+> [`iphone-use`](https://github.com/leeguooooo/iphone-use)(驱动真 iPhone) ·
+> `chrome-use`(浏览器,规划中) · **`wechat-use`**(macOS 微信)。
+> 统一定位:**本地优先、不上云、用户完全掌控数据**。
+
+> **支持微信 4.0.x / 4.1.x 系列**。具体版本兼容矩阵以 `wechat-use doctor` 输出为准;WeChat 热更后通过 profile API 推送适配数据,**无需重发 release**。
+>
+> **命令名**:主命令是 `wechat-use`;装好后 `wechat` 是它的等价别名(`wechat-use send …` ≡ `wechat send …`),老脚本无需改动。
 
 ---
 
@@ -14,13 +22,13 @@
 - **AI agent / IDE 用** ([SKILL.md](./SKILL.md))
   Claude Code / Codex / Cursor 直接学会发消息、查记录、收消息流。
 - **命令行 / shell 脚本**
-  `wechat send / sessions / listen` — cron 和管道友好。
+  `wechat-use send / sessions / listen` — cron 和管道友好。
 - **任意 [wechaty](https://github.com/wechaty/wechaty) bot** (TS / Python / Go)
   `wechat-wechaty-gateway` (gRPC :18401) — 首个真号 wechaty macOS 协议,bot 零改动跑在自己微信上。
 - **HTTP 风格 agent 平台** (Hermes / n8n / Dify / LangChain)
   `wechat-bridge` (HTTP + SSE :18400) — WeChat 变成跟 WhatsApp / Slack 同 shape 的本地接口。
 - **接入自己 SaaS / CF Worker**
-  `wechat orchestrate` (NAT-friendly poll) 或 `wechat tunnel` (CF Tunnel + JWT) — 远程驱动本机微信。
+  `wechat-use orchestrate` (NAT-friendly poll) 或 `wechat-use tunnel` (CF Tunnel + JWT) — 远程驱动本机微信。
 
 > 所有 surface 共享同一个 daemon + 同一个激活码,**装一次全开**。
 
@@ -30,13 +38,13 @@
 
 ### 1. 拿激活码
 
-跟 [@WechatCliBot](https://t.me/WechatCliBot) 私聊 → `/start` → 「📝 申请激活码」→ 写一行**个人用途**说明 → 通过后机器人发你 `wxp_act_xxxxxx`。
+跟 [@WechatCliBot](https://t.me/WechatCliBot) 私聊 → `/start` → 「📝 申请激活码」→ 写一行**个人用途**说明 → 通过后机器人发你 `wechatuse_xxxxxx`。
 前置:关注频道 <https://t.me/+4PuAO3lB9R82ZTVh>。审核 1-24h,[为什么走审核制](./docs/why-activation.md)。仅个人研究用途,任何商业 / 对外服务场景**不予发放**。
 
 ### 2. 装 CLI
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/leeguooooo/wechat-skill/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/leeguooooo/wechat-use/main/install.sh | bash
 ```
 
 确认 `~/.local/bin` 在 `PATH` 里(fish: `fish_add_path $HOME/.local/bin` / zsh: `echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc`)。
@@ -45,7 +53,7 @@ curl -fsSL https://raw.githubusercontent.com/leeguooooo/wechat-skill/main/instal
 
 ```bash
 # 1) 输入激活码
-wechat auth activate wxp_act_xxxxxx
+wechat-use auth activate wechatuse_xxxxxx
 
 # 2) ⚠️ 授权 wechat-bridge 进「辅助功能」(macOS Sonoma+ 强制,不做 send 静默失败)
 #    install.sh 跑完会自动打开「系统设置 → 隐私与安全性 → 辅助功能」并定位到二进制路径
@@ -53,20 +61,20 @@ wechat auth activate wxp_act_xxxxxx
 #    详细 + TCC 故障 → docs/install.md#tcc
 
 # 3) 体检(任何时候出问题先跑这个)
-wechat doctor
+wechat-use doctor
 
 # 4) 抽数据库 key (自动按 WeChat 版本适配)
-wechat init
+wechat-use init
 
 # 5) ⚠️ warmup —— 在 WeChat 客户端里【手动】给文件传输助手发一条消息(随便打个 "1" 都行)
 #    发送路径只在用户首次手动 send 之后才完全 wired,daemon 重启 / 升级后也要重做。
 #    不做的话 step 6 第一次会失败。详见 docs/troubleshooting.md#warmup
 
 # 6) 自测发消息 —— filehelper 是微信「文件传输助手」的 wxid,给自己发,看得到说明 send 通了
-wechat send "Hello 🎉" filehelper
+wechat-use send "Hello 🎉" filehelper
 ```
 
-> ❗ 不要先跑 `wechat init` 再 `wechat auth activate` ——init 不需要激活码能跑通,但是 send / sessions / 等查询命令都需要激活,顺序反了会让你在 step 6 才发现没激活。
+> ❗ 不要先跑 `wechat-use init` 再 `wechat-use auth activate` ——init 不需要激活码能跑通,但是 send / sessions / 等查询命令都需要激活,顺序反了会让你在 step 6 才发现没激活。
 
 ---
 
@@ -74,31 +82,31 @@ wechat send "Hello 🎉" filehelper
 
 ```bash
 # 发消息(recipient 可以是 wxid / 昵称 / 备注 / 群名)
-wechat send "你好" 张三                # 找不到联系人会列出候选,不会静默
-wechat send "Hello 🎉" filehelper     # filehelper = 微信「文件传输助手」,自测最佳目标
-wechat send "test" "李工" --dry-run    # 验证 fuzzy match 但不真发,适合 agent 写脚本前确认
+wechat-use send "你好" 张三                # 找不到联系人会列出候选,不会静默
+wechat-use send "Hello 🎉" filehelper     # filehelper = 微信「文件传输助手」,自测最佳目标
+wechat-use send "test" "李工" --dry-run    # 验证 fuzzy match 但不真发,适合 agent 写脚本前确认
 
 # 查聊天
-wechat sessions                       # 最近 20 个会话(完整 yaml)
-wechat sessions --brief -n 10         # 单行 / 会话,带未读数,适合快速浏览
-wechat contacts --brief -n 20         # 单行 / 联系人 (姓名 + wxid)
-wechat unread -n 5                    # 有未读的
-wechat history "张三" -n 50            # nickname / 群名也行,跟 send 一样会解析
-wechat history --chat 21263894984@chatroom -n 50  # 也支持 --chat
-wechat search "会议" --in "项目讨论组"  # --in 同样解析昵称 / 群名
+wechat-use sessions                       # 最近 20 个会话(完整 yaml)
+wechat-use sessions --brief -n 10         # 单行 / 会话,带未读数,适合快速浏览
+wechat-use contacts --brief -n 20         # 单行 / 联系人 (姓名 + wxid)
+wechat-use unread -n 5                    # 有未读的
+wechat-use history "张三" -n 50            # nickname / 群名也行,跟 send 一样会解析
+wechat-use history --chat 21263894984@chatroom -n 50  # 也支持 --chat
+wechat-use search "会议" --in "项目讨论组"  # --in 同样解析昵称 / 群名
 
 # 收消息流(agent 神器)
-wechat listen --wxid filehelper
-wechat listen --on-message ./reply.sh
+wechat-use listen --wxid filehelper
+wechat-use listen --on-message ./reply.sh
 
 # 语音消息自动转文字 (v1.13.25+)
-wechat audio setup                    # 一次性装齐 ffmpeg/whisper.cpp/silk-decoder/medium 模型
-wechat history "群名" -n 50            # 默认 transcribe 语音 → display_text,agent 看历史不再卡 [语音消息]
-wechat audio transcribe <svr_id>      # 单条转写
+wechat-use audio setup                    # 一次性装齐 ffmpeg/whisper.cpp/silk-decoder/medium 模型
+wechat-use history "群名" -n 50            # 默认 transcribe 语音 → display_text,agent 看历史不再卡 [语音消息]
+wechat-use audio transcribe <svr_id>      # 单条转写
 
 # 自检
-wechat doctor                         # 任何问题先跑这个
-wechat auth status                    # 第一行直接告诉你「剩余 X 天」
+wechat-use doctor                         # 任何问题先跑这个
+wechat-use auth status                    # 第一行直接告诉你「剩余 X 天」
 ```
 
 完整能力矩阵 → [docs/capabilities.md](./docs/capabilities.md)。
@@ -107,23 +115,23 @@ wechat auth status                    # 第一行直接告诉你「剩余 X 天�
 
 ## 接 AI agent
 
-**A. Claude Code / Codex / Cursor** — `npx skills add leeguooooo/wechat-skill -y -g`,agent 读 [SKILL.md](./SKILL.md) 自动学会全部命令。先装 CLI 再装 skill。
+**A. Claude Code / Codex / Cursor** — `npx skills add leeguooooo/wechat-use -y -g`,agent 读 [SKILL.md](./SKILL.md) 自动学会全部命令。先装 CLI 再装 skill。
 
 **B. wechaty bot(任意语言)** — `wechat-wechaty-gateway` 起 gRPC :18401,任意 wechaty 1.x 客户端零改动接入 (`puppet: 'wechaty-puppet-service'` + `endpoint: '127.0.0.1:18401'`)。例子:[`examples/`](./examples/)(echo / mention-only / LLM bot / CF Worker bot)。
 
 **C. HTTP / SSE bridge** — `wechat-bridge` 起 HTTP+SSE :18400,8 个稳定路由,可加 `--shape hermes` 跟 Hermes WhatsApp-bridge 同 shape 零适配。SSE schema → [`wx/schema/sse-payload-v1.10.28.schema.json`](./wx/schema/sse-payload-v1.10.28.schema.json)。
 
 **D. 远程驱动**:
-- `wechat orchestrate setup` — Mac 全 outbound poll SaaS outbox,**不需公网 IP / 域名**(家用宽带 / 公司内网 / GFW 后面都行)→ [docs/v1.12-orchestrate-protocol.md](./docs/v1.12-orchestrate-protocol.md)
-- `wechat tunnel setup` — Cloudflare Tunnel 暴露 + JWT 同步调,适合 CF Worker 偶发触发 → [docs/remote-gateway.md](./docs/remote-gateway.md)
+- `wechat-use orchestrate setup` — Mac 全 outbound poll SaaS outbox,**不需公网 IP / 域名**(家用宽带 / 公司内网 / GFW 后面都行)→ [docs/v1.12-orchestrate-protocol.md](./docs/v1.12-orchestrate-protocol.md)
+- `wechat-use tunnel setup` — Cloudflare Tunnel 暴露 + JWT 同步调,适合 CF Worker 偶发触发 → [docs/remote-gateway.md](./docs/remote-gateway.md)
 
 ---
 
 ## 出问题 / 安全 / 平台
 
-- **排错**:`wechat doctor` 看哪一项 ✗ → 整段输出 + 报错描述提 [GitHub issue](https://github.com/leeguooooo/wechat-skill/issues/new)。详细 → [docs/troubleshooting.md](./docs/troubleshooting.md)
+- **排错**:`wechat-use doctor` 看哪一项 ✗ → 整段输出 + 报错描述提 [GitHub issue](https://github.com/leeguooooo/wechat-use/issues/new)。详细 → [docs/troubleshooting.md](./docs/troubleshooting.md)
 - **安全**:聊天 / 联系人 / key / wxid **永不出本机**;只向 profile API 上报当前 WeChat 指纹拉适配数据。`~/.wx-rs/` 下的 key 文件已 chmod 600,**绝不要**贴 git / pastebin / 群聊。激活码 token 进 macOS Keychain。不改 WeChat.app 二进制,只 ad-hoc 加 `get-task-allow` entitlement
-- **平台**:macOS Apple Silicon。支持 WeChat **4.0.x / 4.1.x 系列**(具体版本以 `wechat doctor` 输出为准)。`wechat init` 自动按版本适配。WeChat 热更后通过 server-side profile 推送新版本适配数据,**无需重发 release**
+- **平台**:macOS Apple Silicon。支持 WeChat **4.0.x / 4.1.x 系列**(具体版本以 `wechat-use doctor` 输出为准)。`wechat-use init` 自动按版本适配。WeChat 热更后通过 server-side profile 推送新版本适配数据,**无需重发 release**
 
 ---
 
@@ -152,11 +160,11 @@ wechat auth status                    # 第一行直接告诉你「剩余 X 天�
 
 ## 关于 fork / Notice to forks
 
-**`github.com/leeguooooo/wechat-skill` 的 `main` 分支是本项目唯一权威版本。**任何 fork 副本、第三方镜像、归档快照里的 README / commit 历史 / release notes / issues 都**不代表本项目当前立场**——尤其是早于 [`1497b15`](https://github.com/leeguooooo/wechat-skill/commit/1497b15)(2026-05-19)之前的快照,其内容已被本仓主动 redact / 删除,以更准确地反映本项目作为**个人研究、永久免费、非商业**工具的实际定位。
+**`github.com/leeguooooo/wechat-use` 的 `main` 分支是本项目唯一权威版本。**任何 fork 副本、第三方镜像、归档快照里的 README / commit 历史 / release notes / issues 都**不代表本项目当前立场**——尤其是早于 [`1497b15`](https://github.com/leeguooooo/wechat-use/commit/1497b15)(2026-05-19)之前的快照,其内容已被本仓主动 redact / 删除,以更准确地反映本项目作为**个人研究、永久免费、非商业**工具的实际定位。
 
 所有 fork、镜像、衍生作品**继续受 [LICENSE](./LICENSE) 与 [DISCLAIMER](./DISCLAIMER.md) 约束**,任何商业使用、转售、SaaS 集成、付费分发均**不被许可**。若你持有本项目的 fork 副本,请**从 upstream 同步到最新版本**(GitHub → Sync fork)或**删除副本**;陈旧副本的内容不应被援引为本项目的立场或行为。
 
-**The `main` branch of `github.com/leeguooooo/wechat-skill` is the sole authoritative version of this project.** README / commit history / release notes / issues in forks, mirrors, or third-party archives — especially snapshots predating [`1497b15`](https://github.com/leeguooooo/wechat-skill/commit/1497b15) (2026-05-19) — do not represent this project's current position. Forks remain bound by [LICENSE](./LICENSE) and [DISCLAIMER](./DISCLAIMER.md). If you hold a fork, please sync it from upstream or delete it; outdated copies should not be cited as the project's position.
+**The `main` branch of `github.com/leeguooooo/wechat-use` is the sole authoritative version of this project.** README / commit history / release notes / issues in forks, mirrors, or third-party archives — especially snapshots predating [`1497b15`](https://github.com/leeguooooo/wechat-use/commit/1497b15) (2026-05-19) — do not represent this project's current position. Forks remain bound by [LICENSE](./LICENSE) and [DISCLAIMER](./DISCLAIMER.md). If you hold a fork, please sync it from upstream or delete it; outdated copies should not be cited as the project's position.
 
 ---
 

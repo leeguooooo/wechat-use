@@ -64,7 +64,7 @@ async function timingSafeEqual(a: string, b: string): Promise<boolean> {
   const enc = new TextEncoder();
   const key = await crypto.subtle.importKey(
     "raw",
-    enc.encode("wechat-skill-const-time"),
+    enc.encode("wechat-use-const-time"),
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"]

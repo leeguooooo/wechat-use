@@ -24,5 +24,5 @@
 
 - bridge 的每次 `/send` 都会校验 token 的 `expires_at`
 - daemon 的 send 路径也会校验,**绕本地客户端没用**
-- token 进 macOS Keychain(`wechat-skill-profile-api` service),不裸文件
+- token 进 macOS Keychain(`wechat-use-profile-api` service),不裸文件
 - 撤销机制:管理员可以 server-side 把 token 标记 revoked,下次心跳即失效

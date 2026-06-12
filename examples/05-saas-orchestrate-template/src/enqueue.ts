@@ -26,12 +26,12 @@
 import { type Env } from "./types.js";
 
 export interface EnqueueParams {
-  /** wxid / room_id@chatroom / display_name — wechat-skill resolves it */
+  /** wxid / room_id@chatroom / display_name — wechat-use resolves it */
   to: string;
   /** Message text */
   text: string;
   /**
-   * Stable idempotency key.  wechat-skill passes this to /v1/send to prevent
+   * Stable idempotency key.  wechat-use passes this to /v1/send to prevent
    * duplicate sends on retry.  Auto-generated from row id if not supplied.
    */
   idempotency_key?: string;
