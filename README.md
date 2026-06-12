@@ -1,5 +1,11 @@
 # wechat-use
 
+<p align="center">
+  <img src="./assets/hero.png" alt="鼠标在老式画图程序里一像素一像素蹭出来的 wechat-use logo——绿色，烂，似像非像" width="540">
+</p>
+
+<p align="center"><sub><i>是的，logo 就长这样。鼠标在画图程序里蹭的，将就看。</i></sub></p>
+
 把 macOS 上的微信变成给 AI agent / bot 用的**本地 API**。
 不上云、不上 iPad 协议、纯本地实现,数据只在你这台 Mac 上动。
 
@@ -8,6 +14,12 @@
 > [`iphone-use`](https://github.com/leeguooooo/iphone-use)(驱动真 iPhone) ·
 > `chrome-use`(浏览器,规划中) · **`wechat-use`**(macOS 微信)。
 > 统一定位:**本地优先、不上云、用户完全掌控数据**。
+
+<p align="center">
+  <img src="./assets/family.png" alt="四个画得很丑的图标：profile / chrome / iphone / wechat" width="500">
+</p>
+
+<p align="center"><sub><i>一家四口，谁也别嫌谁画得丑。</i></sub></p>
 
 > **支持微信 4.0.x / 4.1.x 系列**。具体版本兼容矩阵以 `wechat-use doctor` 输出为准;WeChat 热更后通过 profile API 推送适配数据,**无需重发 release**。
 >
@@ -128,6 +140,12 @@ wechat-use auth status                    # 第一行直接告诉你「剩余 X 
 ---
 
 ## 出问题 / 安全 / 平台
+
+<p align="center">
+  <img src="./assets/local.png" alt="一台破旧电脑，头顶一朵被红叉划掉的云——意思是数据不上云、只在本机" width="380">
+</p>
+
+<p align="center"><sub><i>数据不上云。云被划掉了。就这台破电脑。</i></sub></p>
 
 - **排错**:`wechat-use doctor` 看哪一项 ✗ → 整段输出 + 报错描述提 [GitHub issue](https://github.com/leeguooooo/wechat-use/issues/new)。详细 → [docs/troubleshooting.md](./docs/troubleshooting.md)
 - **安全**:聊天 / 联系人 / key / wxid **永不出本机**;只向 profile API 上报当前 WeChat 指纹拉适配数据。`~/.wx-rs/` 下的 key 文件已 chmod 600,**绝不要**贴 git / pastebin / 群聊。激活码 token 进 macOS Keychain。不改 WeChat.app 二进制,只 ad-hoc 加 `get-task-allow` entitlement
