@@ -1,0 +1,10 @@
+# Local wrangler dev environment variables
+# Copy to .dev.vars (gitignored) and fill in your values.
+# These override [vars] in wrangler.toml for local `wrangler dev` sessions.
+
+# Bearer token — the Mac's `wechat orchestrate --bearer=...` must match this
+BOT_API_TOKEN=your-secret-token-here
+
+# HMAC-SHA256 webhook signing secret — generate with: openssl rand -hex 32
+# The Mac uses this to sign X-Wechat-Signature headers on POST /api/wechat-inbound
+WEBHOOK_SECRET=your-32-byte-hex-secret-here
