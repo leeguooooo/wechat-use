@@ -231,3 +231,6 @@ wechat-use auth status                    # 第一行直接告诉你「剩余 X 
 [非商业自研协议](./LICENSE) + [DISCLAIMER](./DISCLAIMER.md)。**仅限**个人学习 / 研究 / 对本人账号的个人自动化。
 
 本工具基于 macOS 公开调试接口实现,与 WeChat 官方无任何关联,也**不提供任何形式的商业授权、批量分发、SaaS 合作、对外有偿服务**——相关咨询恕不回应。**严禁**用于商业用途 / 群发营销 / 刷单 / 自动化非本人账号 / 爬取或监控他人数据。使用即表示用户**自行承担全部风险**(含微信账号被限制 / 封禁的可能)。
+---
+
+> Built by **leeguooooo** — field notes on AI agents, reverse engineering & Cloudflare Workers at **[blog.misonote.com](https://blog.misonote.com)** · follow on **[X @leeguooooo](https://x.com/leeguooooo)**
