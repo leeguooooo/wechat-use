@@ -227,6 +227,7 @@ wechat-use auth status                    # 第一行直接告诉你「剩余 X 
 ### 深入原理
 
 - [让微信在后台替你发消息,我曾经把它的数据库搞坏 —— 从「挂调试器」到「零附着」](https://blog.leeguoo.com/zh/posts/wechat-macos-noattach-send/) — 后台 send 为什么会弹「数据库已损坏」,以及怎么把 LLDB 断点写内存换成 `mach_vm_write` 做到全程不附着
+- [上班摸鱼聊微信,我把它搬进了终端、还伪装成了 dev 工具](https://blog.leeguoo.com/zh/posts/wechat-macos-moyu-terminal-disguise/) — `chat` 终端聊天 + `disguise` 伪装 App + 老板键 ⌃⌥Space
 
 ---
 
