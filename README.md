@@ -33,6 +33,8 @@
 - 🟢 朋友圈（只读）· ⭐ 收藏 · 🖼 图片（heap 直读 + CDN 回源）
 - 🎙 语音消息转文字（whisper 本地转写）
 - ↩️ 撤回消息归档恢复
+- 💻 **终端聊天 TUI**（`chat`，Claude Code 风,在终端里收发,屏幕上看不出在聊微信）
+- 🥷 **摸鱼伪装**（`disguise` 把微信 App 伪装成 dev 工具 + 老板键 `⌃⌥Space` 一键隐藏)
 - 🛰 daemon + `listen` 实时收消息 · 🔌 HTTP bridge（REST）· 🤖 Wechaty puppet gateway（gRPC）
 - 🔀 多账号 / 多版本并存（`--bundle-id` 路由）
 
@@ -143,6 +145,14 @@ wechat-use listen --on-message ./reply.sh
 wechat-use audio setup                    # 一次性装齐 ffmpeg/whisper.cpp/silk-decoder/medium 模型
 wechat-use history "群名" -n 50            # 默认 transcribe 语音 → display_text,agent 看历史不再卡 [语音消息]
 wechat-use audio transcribe <svr_id>      # 单条转写
+
+# 终端聊天 + 摸鱼伪装(上班不露馅,原理见下「深入原理」)
+wechat-use chat                           # 终端里开聊天 TUI(Claude Code 风),上下选会话
+wechat-use chat 张三                       # 直接进某个对话,打字回车后台发出去
+wechat-use disguise list                  # 看伪装皮
+wechat-use disguise apply console         # 把微信 App 伪装成终端(Dock/Cmd-Tab 都不叫微信)
+wechat-use disguise bosskey on            # 老板键:⌃⌥Space 一键隐藏/恢复微信
+wechat-use disguise restore               # 一键变回原来的绿色微信
 
 # 自检
 wechat-use doctor                         # 任何问题先跑这个
