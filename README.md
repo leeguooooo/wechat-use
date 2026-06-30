@@ -224,6 +224,10 @@ wechat-use auth status                    # 第一行直接告诉你「剩余 X 
 - [docs/v1.12-orchestrate-protocol.md](./docs/v1.12-orchestrate-protocol.md) / [docs/remote-gateway.md](./docs/remote-gateway.md) — 远程驱动两条路
 - [docs/CHANGELOG.md](./docs/CHANGELOG.md) / [docs/ROADMAP.md](./docs/ROADMAP.md)
 
+### 深入原理
+
+- [让微信在后台替你发消息,我曾经把它的数据库搞坏 —— 从「挂调试器」到「零附着」](https://blog.leeguoo.com/zh/posts/wechat-macos-noattach-send/) — 后台 send 为什么会弹「数据库已损坏」,以及怎么把 LLDB 断点写内存换成 `mach_vm_write` 做到全程不附着
+
 ---
 
 ## License + 免责
