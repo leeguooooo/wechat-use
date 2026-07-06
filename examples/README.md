@@ -53,7 +53,7 @@ node bot.js                 # loopback 模式不需要 bearer
 
 **`Status::Unauthenticated: missing activation`**
 
-→ 先跑 `wechat-use auth activate <激活码>`。激活码经人工审核**免费发放**:跟 [@WechatCliBot](https://t.me/WechatCliBot) 私聊申请,前置关注频道 [WechatCli](https://t.me/+4PuAO3lB9R82ZTVh)。详见 [DISCLAIMER](../DISCLAIMER.md)。
+→ 先跑 `wechat-use auth activate <激活码>`。激活码经人工审核**免费发放**:跟 [@WechatCliBot](https://t.me/WechatCliBot) 私聊申请,前置关注频道 [WechatCli](https://t.me/wechatuse)。详见 [DISCLAIMER](../DISCLAIMER.md)。
 
 **`Status::Unauthenticated: missing bearer token`**
 
@@ -71,7 +71,8 @@ Node 客户端的 `token` 字段不是这个 bearer，是 wechaty puppet token�
 
 ## 反馈
 
-- 频道：https://t.me/+4PuAO3lB9R82ZTVh
+- 频道：https://t.me/wechatuse
+- 交流群：https://t.me/Wechatuse_talk
 - bot：[@WechatCliBot](https://t.me/WechatCliBot)（贴 `wechat-use doctor` 全输出 + 你想做的事）
 
 ## License

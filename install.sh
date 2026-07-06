@@ -1048,7 +1048,8 @@ printf '%s下一步 —— 按顺序执行：%s\n\n' "${C_BOLD}" "${C_RESET}"
 
 step "$(cmd 'wechat auth activate <激活码>')"
 printf '    %sv1.9.1 起需先输入激活码。无激活码？跟 Telegram 机器人申请：%s\n' "${C_DIM}" "${C_RESET}"
-printf '    %s频道公告：https://t.me/+4PuAO3lB9R82ZTVh%s\n' "${C_DIM}" "${C_RESET}"
+printf '    %s频道公告：https://t.me/wechatuse%s\n' "${C_DIM}" "${C_RESET}"
+printf '    %s交流群：https://t.me/Wechatuse_talk （可选，畅所欲言 / 求助）%s\n' "${C_DIM}" "${C_RESET}"
 printf '    %s申请机器人：https://t.me/WechatCliBot （/start 看说明，激活码走人工审核，⚠️ 仅个人研究用途，商业/对外服务一律拒绝）%s\n\n' "${C_DIM}" "${C_RESET}"
 
 step "$(cmd '授权 wechat-bridge 进「辅助功能」（首次必做，不做 send 静默失败）')"

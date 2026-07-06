@@ -25,4 +25,4 @@
 
 ## 想看新版本？
 
-关注 Telegram 频道：<https://t.me/+4PuAO3lB9R82ZTVh>
+关注 Telegram 频道：<https://t.me/wechatuse>

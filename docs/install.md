@@ -7,7 +7,8 @@
 ## 0. 前置
 
 - macOS Apple Silicon
-- 已关注频道 <https://t.me/+4PuAO3lB9R82ZTVh>（未关注 bot 拦截审核）
+- 已关注频道 <https://t.me/wechatuse>（未关注 bot 拦截审核）
+- 交流群（可选）：<https://t.me/Wechatuse_talk> — 用法交流 / 求助 / 反馈
 - 已有 WeChat 4.0.1.52 / 4.1.8 / 4.1.9 任一版本
 - 终端有 `~/.local/bin` 在 `PATH`
 

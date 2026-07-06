@@ -81,7 +81,9 @@
 ### 1. 拿激活码
 
 跟 [@WechatCliBot](https://t.me/WechatCliBot) 私聊 → `/start` → 「📝 申请激活码」→ 写一行**个人用途**说明 → 通过后机器人发你 `wechatuse_xxxxxx`。
-前置:关注频道 <https://t.me/+4PuAO3lB9R82ZTVh>。审核 1-24h,[为什么走审核制](./docs/why-activation.md)。仅个人研究用途,任何商业 / 对外服务场景**不予发放**。
+前置:关注频道 <https://t.me/wechatuse>(release / 适配公告)。审核 1-24h,[为什么走审核制](./docs/why-activation.md)。仅个人研究用途,任何商业 / 对外服务场景**不予发放**。
+
+💬 交流 / 求助 / 反馈:[wechat-use 交流群](https://t.me/Wechatuse_talk)(可选,不影响申请)。
 
 ### 2. 装 CLI
 
