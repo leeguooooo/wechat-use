@@ -39,8 +39,11 @@ curl -fsSL https://raw.githubusercontent.com/leeguooooo/wechat-use/main/install.
 
 1. 下载 binary 到 `~/.local/bin/`：`wechat` / `wechat-bridge` / `wechatd` / `wechat-wechaty-gateway` / `wechat-inspect-msg`
 2. 给 binary 加可执行位 + ad-hoc codesign（macOS Gatekeeper 必需）
-3. 注册 `ai.wechat.bridge` LaunchAgent（开机自启 wechat-bridge）
-4. 启动 LaunchAgent 跑 `/health` 探活
+3. 找到本地 WeChat 4.1.9 时，提示是否创建独立副本；选择后不会覆盖当前微信或源 app
+4. 注册 `ai.wechat.bridge` LaunchAgent（开机自启 wechat-bridge）
+5. 启动 LaunchAgent 跑 `/health` 探活
+
+自动化安装可以显式选择：`WECHAT_USE_PREFER_419=yes` 创建副本，`WECHAT_USE_PREFER_419=no` 跳过。本地 4.1.9 不在默认路径时，再传 `WECHAT_419_SOURCE=/path/to/WeChat-4.1.9.app`。
 
 确认 PATH：
 

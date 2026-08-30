@@ -91,6 +91,8 @@
 curl -fsSL https://raw.githubusercontent.com/leeguooooo/wechat-use/main/install.sh | bash
 ```
 
+WeChat 4.1.9 的功能覆盖最完整，体验也最稳定。安装器找到本地 4.1.9 后会询问是否使用；选择后只创建独立副本，不覆盖当前 `/Applications/WeChat.app`。
+
 确认 `~/.local/bin` 在 `PATH` 里(fish: `fish_add_path $HOME/.local/bin` / zsh: `echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc`)。
 
 ### 3. 按这个顺序跑(install.sh 输出末尾也会重述一遍)
