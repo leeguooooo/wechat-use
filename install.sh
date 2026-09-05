@@ -15,6 +15,7 @@ SUPPORTED_WECHAT_VERSIONS="4.1.9"
 SUPPORTED_WECHAT_BUILDS=""
 WECHAT_DOWNLOAD_URL="https://dldir1v6.qq.com/weixin/Universal/Mac/WeChatMac_4.1.9.dmg"
 WECHAT_419_DMG_URL="$WECHAT_DOWNLOAD_URL"
+WECHAT_419_DMG_BACKUP_URL="https://pub-1d3598b37fc7448ba5cd296047de72dc.r2.dev/wechat/WeChatMac_4.1.9_268602.dmg"
 WECHAT_419_DMG_SHA256="0e8510d1a004fe6373aa0ad1806d73d4bcf9a32f0c62284d8eb82cefe2b78d06"
 PREFERRED_WECHAT_VERSION="4.1.9"
 PREFERRED_WECHAT_SOURCE="${WECHAT_419_SOURCE:-}"
@@ -421,14 +422,26 @@ cleanup_install_stage() {
 }
 
 download_preferred_wechat_source() {
-  local dmg="$STAGE/WeChatMac_4.1.9.dmg" actual
+  local dmg="$STAGE/WeChatMac_4.1.9.dmg" actual url verified=0
   info '从微信官方下载 4.1.9（约 466 MB）…' >&2
-  curl --fail --location --show-error --retry 2 --connect-timeout 20 --max-time 900 \
-    --proto '=https' --proto-redir '=https' \
-    "$WECHAT_419_DMG_URL" -o "$dmg" || return 1
-  actual=$(shasum -a 256 "$dmg" | awk '{print $1}')
-  [[ "$actual" == "$WECHAT_419_DMG_SHA256" ]] || {
-    err '4.1.9 安装包校验不符，已停止安装。请更新安装命令后重试。'
+  # Both sources must provide the exact frozen vendor build. A mutable manifest
+  # must never replace this pinned checksum during installation.
+  for url in "$WECHAT_419_DMG_URL" "$WECHAT_419_DMG_BACKUP_URL"; do
+    if [[ "$url" == "$WECHAT_419_DMG_BACKUP_URL" ]]; then
+      warn '官方下载失败或校验不符，自动尝试 4.1.9 备份源…'
+    fi
+    if curl --fail --location --show-error --connect-timeout 20 --max-time 900 \
+      --speed-limit 1024 --speed-time 30 --proto '=https' --proto-redir '=https' \
+      "$url" -o "$dmg"; then
+      actual=$(shasum -a 256 "$dmg" | awk '{print $1}') || actual=""
+      if [[ "$actual" == "$WECHAT_419_DMG_SHA256" ]]; then
+        verified=1
+        break
+      fi
+    fi
+  done
+  [[ "$verified" == 1 ]] || {
+    err '官方源和备份源均未提供通过校验的 4.1.9 安装包，已停止安装。请稍后重跑同一安装命令。'
     return 1
   }
   WECHAT_419_MOUNT="$STAGE/wechat-419-dmg"
