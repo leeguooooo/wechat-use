@@ -225,7 +225,7 @@ wechat_get_task_allow_state() {
     return
   fi
   local v
-  v=$(printf '%s' "${ents}" | plutil -extract com.apple.security.get-task-allow raw -o - - 2>/dev/null || true)
+  v=$(printf '%s' "${ents}" | plutil -extract 'com\.apple\.security\.get-task-allow' raw -o - - 2>/dev/null || true)
   if [[ "${v}" == "true" ]]; then
     echo "true"
   else
@@ -233,15 +233,8 @@ wechat_get_task_allow_state() {
   fi
 }
 
-# Print a loud banner + a self-contained merge-mode re-sign recipe when
-# WeChat lacks get-task-allow. Doesn't exit — binaries installed fine,
-# this is a follow-up TCC-level prereq for `wechat send` to actually work.
-#
-# CRITICAL: the recipe MUST merge into WeChat 原有的 entitlements
-# (官方签名里有一组系统 entitlements,不能 strip)。如果整段 replace 成
-# 只有 get-task-allow=true,WeChat 每次启动都会弹「access data from
-# other apps」TCC 弹框。所以必须 merge,不能 replace。
-#
+# Route repairs through the managed CLI; never suggest quitting or re-signing
+# the main WeChat application by its display name.
 # Returns 0 if OK / can't tell; 1 if confirmed broken.
 warn_if_wechat_lacks_get_task_allow() {
   local state
@@ -260,34 +253,8 @@ warn_if_wechat_lacks_get_task_allow() {
       return 1
       ;;
     false|*)
-      echo ""
-      printf '%s━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%s\n' "${C_RED}" "${C_RESET}"
-      printf '%s🛑 WeChat get-task-allow = false —— send 适配模块装不上,必失败%s\n' "${C_RED}" "${C_RESET}"
-      printf '%s━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%s\n' "${C_RED}" "${C_RESET}"
-      echo ""
-      echo "官方分发的 WeChat 签名里没 get-task-allow,wechatd 的本地调试接口无法配合"
-      echo "完成 send 路径设置,必然 30s 超时 → \`wechat send\` 永远返回 \`slot_send_bp_failed_to_arm\`。"
-      echo ""
-      echo "下面这段【保留原有 entitlements】(官方签名里有一组系统 entitlements,"
-      echo "merge 而不是 replace,否则 TCC 会反复弹框),只加 get-task-allow=true。"
-      echo "复制整段到终端跑:"
-      echo ""
-      printf '%s' "${C_GREEN}"
-      cat <<'CMD'
-  WX_BIN="${PREFERRED_WECHAT_TARGET}/Contents/MacOS/WeChat"
-  WX_ENT=/tmp/wechat-merged-entitlements.plist
-  codesign -d --entitlements :- "$WX_BIN" > "$WX_ENT"
-  /usr/libexec/PlistBuddy -c "Add :com.apple.security.get-task-allow bool true" "$WX_ENT" \
-    || /usr/libexec/PlistBuddy -c "Set :com.apple.security.get-task-allow true" "$WX_ENT"
-  osascript -e 'quit app "WeChat"' 2>/dev/null; sleep 2
-  sudo codesign --force --sign - --entitlements "$WX_ENT" "$WX_BIN"
-  open -a WeChat
-CMD
-      printf '%s' "${C_RESET}"
-      echo ""
-      echo "完成后跑 \`wechat doctor\` 应看到 wechat_get_task_allow ✓,再发就通。"
-      printf '%s━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%s\n' "${C_RED}" "${C_RESET}"
-      echo ""
+      warn "独立微信缺少 get-task-allow：$PREFERRED_WECHAT_TARGET"
+      info '请运行 wechat-use init 修复独立副本，再运行 wechat-use doctor；不要重签或退出主微信。'
       return 1
       ;;
   esac
@@ -303,7 +270,7 @@ CMD
 # Skipped silently when prerequisites (init / auth / WeChat running)
 # aren't in place — this is a smoke test, not an init replacement.
 maybe_smoke_send() {
-  local config_file="${HOME}/.wx-rs/config.json"
+  local config_file="${HOME}/.wx-rs/com_tencent_xinWeChat419WechatUse/config.json"
   # Init hasn't run → no key, no daemon — silent skip.
   if [[ ! -f "${config_file}" ]]; then
     return 0
@@ -316,7 +283,7 @@ maybe_smoke_send() {
     return 0
   fi
   # WeChat running? Without it the daemon can't attach to the runtime.
-  if ! pgrep -x WeChat >/dev/null 2>&1; then
+  if ! ps -axo comm= | grep -Fx -- "$PREFERRED_WECHAT_TARGET/Contents/MacOS/WeChat" >/dev/null; then
     info "filehelper smoke send 已跳过（WeChat 未运行；启动 WeChat 后跑：wechat send 'hi' filehelper）"
     return 0
   fi
@@ -324,7 +291,7 @@ maybe_smoke_send() {
   # 没有的话 send 适配模块装不上,smoke 跑了也是浪费 30s + 误报首发
   # warmup 问题。提前 skip,banner 已经在前面打过了。
   if [[ "$(wechat_get_task_allow_state)" != "true" ]]; then
-    info "filehelper smoke send 已跳过（WeChat get-task-allow=false,先跑上面那段重签命令）"
+    info "filehelper smoke send 已跳过（独立微信需要修复；请运行 wechat-use init）"
     return 0
   fi
   info "跑 filehelper smoke send：warmup WeChat 内部 send pipeline + 端到端验证"
@@ -500,6 +467,25 @@ prepare_preferred_wechat_419() {
 
 # Test harnesses source this file to exercise the 4.1.9 decision flow without
 # downloading binaries or touching LaunchAgents. Normal installs never set it.
+install_destination_command() {
+  local directory="$1"
+  shift
+  if [[ -w "$directory" ]]; then "$@"; else sudo "$@"; fi
+}
+
+install_binary_atomically() {
+  local source="$1" destination="$2" candidate
+  candidate=$(install_destination_command "${destination%/*}" mktemp "${destination%/*}/.${destination##*/}.install.XXXXXX") || return 1
+  # A running signed Mach-O must keep its original inode and bytes until
+  # graceful shutdown; overwriting it in place triggers macOS SIGKILL.
+  if install_destination_command "${destination%/*}" install -m 755 "$source" "$candidate" &&
+      install_destination_command "${destination%/*}" mv -f "$candidate" "$destination"; then
+    return 0
+  fi
+  install_destination_command "${destination%/*}" rm -f -- "$candidate"
+  return 1
+}
+
 if [[ "${WECHAT_USE_INSTALL_LIB_ONLY:-0}" == "1" ]]; then
   return 0 2>/dev/null || exit 0
 fi
@@ -606,12 +592,7 @@ for BIN_NAME in "${BINS[@]}"; do
       sudo cp -p "${DEST}" "${DEST}.prev"
     fi
   fi
-  if [[ -w "${INSTALL_DIR}" ]]; then
-    install -m 755 "${SRC}" "${DEST}"
-  else
-    info "把 ${BIN_NAME} 装到 ${INSTALL_DIR} 需要 sudo 授权……"
-    sudo install -m 755 "${SRC}" "${DEST}"
-  fi
+  install_binary_atomically "$SRC" "$DEST" || { err "安装 $BIN_NAME 失败，原文件保持不变"; exit 1; }
 
   # Ad-hoc signed binary — 去掉 quarantine 避免 Gatekeeper 弹窗
   if [[ -w "${INSTALL_DIR}/${BIN_NAME}" ]]; then
