@@ -80,3 +80,11 @@ fi
 grep -F '安装未完成' "$TEST_ROOT/failure.log" >/dev/null
 grep -F '重跑同一安装命令' "$TEST_ROOT/failure.log" >/dev/null
 echo 'PASS: staged failure preserves installed CLI and prints recovery instructions'
+
+LAUNCHAGENT_PLIST="$TEST_ROOT/bridge.plist"
+printf '<?xml version="1.0"?><plist version="1.0"><dict><key>StandardErrorPath</key><string>%s/actual-bridge.err</string></dict></plist>\n' "$TEST_ROOT" > "$LAUNCHAGENT_PLIST"
+printf 'error: bridge refused to start: Accessibility TCC missing\n' > "$TEST_ROOT/actual-bridge.err"
+bridge_log_says_tcc_missing
+printf 'port already in use\n' > "$TEST_ROOT/actual-bridge.err"
+if bridge_log_says_tcc_missing; then echo 'FAIL: unrelated bridge failure called TCC'; exit 1; fi
+echo 'PASS: actual LaunchAgent log distinguishes TCC from other failures'

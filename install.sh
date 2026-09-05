@@ -78,6 +78,14 @@ wait_for_bridge_health_retry() {
 # tripped), and they'll never `tail` it on their own. Surface the real
 # reason inline so the next install step (TCC fix) is anchored to the
 # observed failure mode, not a guess.
+bridge_error_log() {
+  local plist="${LAUNCHAGENT_PLIST:-$HOME/Library/LaunchAgents/ai.wechat.bridge.plist}" configured=""
+  if [[ -f "$plist" ]]; then
+    configured=$(plutil -extract StandardErrorPath raw -o - "$plist" 2>/dev/null || true)
+  fi
+  printf '%s\n' "${configured:-/tmp/wechat-bridge.err}"
+}
+
 dump_bridge_diag() {
   local label="${1:-bridge 未通过 /health 检查}"
   # All output goes to stderr — keep it on a single stream so the
@@ -94,7 +102,8 @@ dump_bridge_diag() {
     printf '    %slaunchctl: state=%s runs=%s last_exit=%s%s\n' \
       "${C_DIM}" "${state:-?}" "${runs:-?}" "${last_exit:-?}" "${C_RESET}" >&2
   fi
-  local log="${HOME}/.hermes/logs/wechat.bridge.error.log"
+  local log
+  log=$(bridge_error_log)
   if [[ -f "${log}" ]]; then
     printf '%s── 最近 30 行 bridge stderr (%s) ──%s\n' "${C_DIM}" "${log}" "${C_RESET}" >&2
     tail -n 30 "${log}" 2>/dev/null | sed 's/^/    /' >&2
@@ -114,7 +123,8 @@ dump_bridge_diag() {
 # stderr ("Accessibility TCC not granted") is the ground truth — it's
 # emitted by the same audit-token context that fails to serve.
 bridge_log_says_tcc_missing() {
-  local log="${HOME}/.hermes/logs/wechat.bridge.error.log"
+  local log
+  log=$(bridge_error_log)
   [[ -f "${log}" ]] || return 1
   # Match either of the two phrases preflight emits.
   tail -n 60 "${log}" 2>/dev/null \
