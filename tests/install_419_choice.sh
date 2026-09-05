@@ -41,11 +41,14 @@ source "$(cd "$(dirname "$0")/.." && pwd)/install.sh"
 # Signing behavior is exercised with the real vendor bundle in live QA.
 # These lifecycle fixtures intentionally have no native helper executable.
 usable_419_source() { supported_419_source "$1"; }
+# Full bundle branding has separate signature-preservation/swap fixtures.
+brand_preferred_wechat_419() { printf 'brand %s\n' "$PREFERRED_WECHAT_NAME" >> "$WECHAT_CLONE_ARGS_LOG"; }
 export WECHAT_USE_PREFER_419=yes
 choose_preferred_wechat_419 >/dev/null
 maybe_offer_preferred_wechat_419 >/dev/null
 grep -F -- '--make-default' "$WECHAT_CLONE_ARGS_LOG" >/dev/null
 grep -F 'update-guard disable' "$WECHAT_CLONE_ARGS_LOG" >/dev/null
+grep -F 'brand 微信 4.1.9（工具专用）' "$WECHAT_CLONE_ARGS_LOG" >/dev/null
 grep -F 'defaults write com.tencent.xinWeChat419WechatUse ' "$WECHAT_CLONE_ARGS_LOG" >/dev/null
 [[ "$(wechat_app_bundle_id "$WECHAT_419_SOURCE")" == com.tencent.xinWeChat419 ]]
 before=$(shasum "$WECHAT_419_TARGET/Contents/Info.plist")

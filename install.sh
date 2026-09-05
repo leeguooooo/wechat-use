@@ -21,7 +21,9 @@ PREFERRED_WECHAT_VERSION="4.1.9"
 PREFERRED_WECHAT_SOURCE="${WECHAT_419_SOURCE:-}"
 PREFERRED_WECHAT_TARGET="${WECHAT_419_TARGET:-$HOME/Applications/WeChat-4.1.9-wechat-use.app}"
 PREFERRED_WECHAT_BUNDLE_ID="com.tencent.xinWeChat419WechatUse"
-PREFERRED_WECHAT_NAME="${WECHAT_419_NAME:-WeChat 4.1.9 (wechat-use)}"
+PREFERRED_WECHAT_NAME="${WECHAT_419_NAME:-微信 4.1.9（工具专用）}"
+WECHAT_419_ICON_URL="https://raw.githubusercontent.com/leeguooooo/wechat-use/83080eff227966590f201e2f0fb5642fd002844e/assets/wechat-tool-419.icns"
+WECHAT_419_ICON_SHA256="d6fefdd0ecd48defba4f3b8e876b1bf7ad7aef9d9122050af4385305abcacd91"
 
 # ANSI color helpers — only emit if stderr/stdout is a tty so logs piped to
 # files or grep stay readable.
@@ -424,6 +426,112 @@ download_preferred_wechat_source() {
   }
 }
 
+preferred_branding_is_current() {
+  local app="$1" plist="$1/Contents/Info.plist" strings key filesystem_name
+  filesystem_name=$(basename "${PREFERRED_WECHAT_TARGET%/}" .app)
+  for key in CFBundleName CFBundleDisplayName; do
+    [[ "$(plutil -extract "$key" raw -o - "$plist" 2>/dev/null || true)" == "$filesystem_name" ]] || return 1
+    for strings in "$app"/Contents/Resources/*.lproj/InfoPlist.strings; do
+      [[ -f "$strings" ]] || continue
+      [[ ! -L "$strings" && ! -L "${strings%/*}" ]] || return 1
+      [[ "$(plutil -extract "$key" raw -o - "$strings" 2>/dev/null || true)" == "$PREFERRED_WECHAT_NAME" ]] || return 1
+    done
+  done
+  [[ "$(plutil -extract CFBundleIconFile raw -o - "$plist" 2>/dev/null || true)" == WeChatTool419 ]] || return 1
+  ! plutil -extract CFBundleIconName raw -o - "$plist" >/dev/null 2>&1 || return 1
+  [[ "$(shasum -a 256 "$app/Contents/Resources/WeChatTool419.icns" 2>/dev/null | awk '{print $1}')" == "$WECHAT_419_ICON_SHA256" ]]
+}
+
+swap_branding_bundle() {
+  # macOS renamex_np(RENAME_SWAP=2) atomically exchanges two non-empty
+  # directories. Stock Ruby/Fiddle calls libc; no SDK compilation is needed.
+  env -u RUBYOPT -u RUBYLIB /usr/bin/ruby --disable-gems -rfiddle -e '
+    swap = Fiddle::Function.new(Fiddle::Handle::DEFAULT["renamex_np"],
+      [Fiddle::TYPE_VOIDP, Fiddle::TYPE_VOIDP, Fiddle::TYPE_INT], Fiddle::TYPE_INT)
+    raise SystemCallError.new("renamex_np", Fiddle.last_error) unless swap.call(ARGV[0], ARGV[1], 2).zero?
+  ' "$1" "$2"
+}
+
+refresh_branding_registration() {
+  touch "$1"
+  /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$1" >/dev/null 2>&1 || true
+}
+
+brand_preferred_wechat_419() (
+  local app="$PREFERRED_WECHAT_TARGET" work='' swapped=0 staged plist strings key item backup original_inode original_info filesystem_name
+  [[ -d "$app" && ! -L "$app" ]] || { err '副本路径无效或是符号链接，未修改'; return 1; }
+  app=$(cd "$app" && pwd -P) || return 1
+  case "$app" in /Applications/WeChat.app|/Applications/WeChat.app/*) err '不能修改主微信'; return 1 ;; esac
+  supported_419_source "$app" &&
+    [[ "$(wechat_app_bundle_id "$app")" == "$PREFERRED_WECHAT_BUNDLE_ID" ]] || { err '只能修改工具专用的 4.1.9 副本'; return 1; }
+  [[ ! -L "$app/Contents" && ! -L "$app/Contents/Info.plist" && ! -L "$app/Contents/Resources" ]] || return 1
+  codesign --verify --deep --strict "$app" || return 1
+  if preferred_branding_is_current "$app"; then return 0; fi
+  original_inode=$(stat -f %i "$app") || return 1
+  original_info=$(shasum -a 256 "$app/Contents/Info.plist" | awk '{print $1}') || return 1
+  [[ -x /usr/bin/ruby ]] || { err '缺少 macOS Ruby，无法安全交换副本，未修改'; return 1; }
+  work=$(mktemp -d "${app%/*}/.wechat-branding.XXXXXX") || return 1
+  trap 'if [[ "$swapped" == 0 && -n "$work" && -d "$work" ]] && ! preferred_branding_is_current "$app"; then rm -rf -- "$work"; fi' EXIT
+  # Download and pin the complete icon before writing any app content.
+  curl --fail --location --silent --show-error --connect-timeout 20 --max-time 120 \
+    --proto '=https' --proto-redir '=https' "$WECHAT_419_ICON_URL" -o "$work/icon.icns" || return 1
+  [[ "$(shasum -a 256 "$work/icon.icns" | awk '{print $1}')" == "$WECHAT_419_ICON_SHA256" ]] || { err '工具图标校验不符，原副本未修改'; return 1; }
+  codesign -d --entitlements :- "$app" > "$work/entitlements.plist" 2>/dev/null || return 1
+  plutil -lint "$work/entitlements.plist" >/dev/null || return 1
+  [[ "$(plutil -extract 'com\.apple\.security\.get-task-allow' raw -o - "$work/entitlements.plist")" == true ]] || return 1
+  staged="$work/WeChat.app"
+  cp -cR "$app" "$staged" 2>/dev/null || cp -R "$app" "$staged" || return 1
+  [[ "$(stat -f %i "$app/Contents/MacOS/WeChat")" != "$(stat -f %i "$staged/Contents/MacOS/WeChat")" ]] || return 1
+  plist="$staged/Contents/Info.plist"
+  filesystem_name=$(basename "$app" .app)
+  for key in CFBundleName CFBundleDisplayName; do
+    # Finder only applies InfoPlist.strings names when the unlocalized name
+    # matches the app's filename. Keep the stable ASCII path for tool routing.
+    plutil -replace "$key" -string "$filesystem_name" "$plist" || return 1
+    for strings in "$staged"/Contents/Resources/*.lproj/InfoPlist.strings; do
+      [[ -f "$strings" ]] || continue
+      [[ ! -L "$strings" && ! -L "${strings%/*}" ]] || return 1
+      # Vendor .strings may use OpenStep text; plutil cannot rewrite that
+      # format directly. CFBundle also accepts lossless binary-plist strings.
+      plutil -convert binary1 "$strings" || return 1
+      plutil -replace "$key" -string "$PREFERRED_WECHAT_NAME" "$strings" || return 1
+    done
+  done
+  [[ ! -L "$staged/Contents/Resources/WeChatTool419.icns" ]] || return 1
+  cp "$work/icon.icns" "$staged/Contents/Resources/WeChatTool419.icns" || return 1
+  plutil -replace CFBundleIconFile -string WeChatTool419 "$plist" || return 1
+  plutil -remove CFBundleIconName "$plist" 2>/dev/null || true
+  # Preserve the clone's complete sandbox / app groups / debugger entitlements,
+  # and keep every Tencent-signed nested component byte-for-byte unchanged.
+  codesign --force --sign - --entitlements "$work/entitlements.plist" "$staged" || return 1
+  codesign --verify --deep --strict "$staged" || return 1
+  codesign -d --entitlements :- "$staged" > "$work/verified-entitlements.plist" 2>/dev/null || return 1
+  plutil -convert xml1 "$work/entitlements.plist" "$work/verified-entitlements.plist" || return 1
+  cmp -s "$work/entitlements.plist" "$work/verified-entitlements.plist" || { err '副本权限发生变化，未替换'; return 1; }
+  for item in Contents/Resources/wechat.dylib Contents/Frameworks/wechat.dylib; do
+    [[ ! -f "$app/$item" ]] || cmp -s "$app/$item" "$staged/$item" || return 1
+  done
+  preferred_branding_is_current "$staged" || return 1
+  [[ "$(stat -f %i "$app")" == "$original_inode" &&
+    "$(shasum -a 256 "$app/Contents/Info.plist" | awk '{print $1}')" == "$original_info" ]] || { err '副本在准备期间发生变化，未替换'; return 1; }
+  swap_branding_bundle "$app" "$staged" || return 1
+  swapped=1
+  # Keep the old inode tree for the still-running app and for recovery. The
+  # non-.app suffix prevents accidentally launching a duplicate bundle id.
+  backup="$staged"
+  if mv "$staged" "$work/Previous.app.previous"; then backup="$work/Previous.app.previous"; fi
+  refresh_branding_registration "$app"
+  success "副本名称和图标已更新：$PREFERRED_WECHAT_NAME"
+  info "已保留旧副本：${backup}；没有重启微信或修改登录数据。"
+  info '正在运行的 Dock 图标可能在副本下次启动时刷新。'
+)
+
+maybe_brand_preferred_wechat_419() {
+  if ! brand_preferred_wechat_419; then
+    warn '副本名称或图标暂未更新，不影响独立微信功能；稍后重跑同一安装命令即可重试。'
+  fi
+}
+
 maybe_offer_preferred_wechat_419() {
   local managed_cli="${MANAGED_SETUP_CLI:-$INSTALL_DIR/wechat}"
   # User consent was collected before any installation or service changes.
@@ -433,6 +541,7 @@ maybe_offer_preferred_wechat_419() {
         err "目标路径已被其他 app 占用，请保留或移走它后重试：$PREFERRED_WECHAT_TARGET"
         return 1
       }
+    maybe_brand_preferred_wechat_419
     "$managed_cli" clone use "$PREFERRED_WECHAT_TARGET" || return 1
   else
     if ! PREFERRED_WECHAT_SOURCE=$(find_preferred_wechat_source); then
@@ -444,6 +553,7 @@ maybe_offer_preferred_wechat_419() {
       --source "$PREFERRED_WECHAT_SOURCE" --target "$PREFERRED_WECHAT_TARGET" \
       --name "$PREFERRED_WECHAT_NAME" --bundle-id "$PREFERRED_WECHAT_BUNDLE_ID" \
       --make-default || return 1
+    maybe_brand_preferred_wechat_419
   fi
   "$managed_cli" update-guard disable || return 1
   defaults write "$PREFERRED_WECHAT_BUNDLE_ID" SUEnableAutomaticChecks -bool false

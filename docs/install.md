@@ -40,6 +40,8 @@ curl -fsSL https://raw.githubusercontent.com/leeguooooo/wechat-use/main/install.
 1. 询问是否安装独立的微信 4.1.9，然后下载 CLI 到 `~/.local/bin/`
 2. 优先复制本地支持的 4.1.9；没有时从腾讯官方下载固定安装包，验证 SHA-256 和签名
 3. 创建 `~/Applications/WeChat-4.1.9-wechat-use.app`，独立 bundle id 和沙盒目录，默认绑定工具并关闭副本更新
+   - 显示名统一为“微信 4.1.9（工具专用）”，图标带鼠标箭头和 4.1.9 标记。
+   - 已有副本也会更新名称和图标；不会重启已登录的副本。运行中的 Dock 图标可能在副本下次启动后刷新。
 4. 注册 `ai.wechat.bridge` LaunchAgent（开机自启 wechat-bridge）
 5. 启动 LaunchAgent 跑 `/health` 探活
 
