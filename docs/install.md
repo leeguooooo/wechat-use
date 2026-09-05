@@ -37,15 +37,17 @@ curl -fsSL https://raw.githubusercontent.com/leeguooooo/wechat-use/main/install.
 
 `install.sh` 干的事：
 
-1. 询问是否安装独立的微信 4.1.9，然后下载 CLI 到 `~/.local/bin/`
+1. 首次询问是否安装独立微信 4.1.9，再下载 CLI；已绑定的副本直接复用，不重复询问
 2. 优先复制本地支持的 4.1.9；没有时从腾讯官方下载固定安装包，验证 SHA-256 和签名
 3. 创建 `~/Applications/WeChat-4.1.9-wechat-use.app`，独立 bundle id 和沙盒目录，默认绑定工具并关闭副本更新
    - 显示名统一为“微信 4.1.9（工具专用）”，图标带鼠标箭头和 4.1.9 标记。
    - 已有副本也会更新名称和图标；不会重启已登录的副本。运行中的 Dock 图标可能在副本下次启动后刷新。
-4. 注册 `ai.wechat.bridge` LaunchAgent（开机自启 wechat-bridge）
-5. 启动 LaunchAgent 跑 `/health` 探活
+4. 首次注册 `ai.wechat.bridge` LaunchAgent；文件未变化且现有服务版本、启动路径、进程关系和辅助功能授权检查通过时，不覆盖文件、不轮换备份、不重启服务
+5. 检查实际状态，只列出尚未完成的激活、登录、授权或初始化步骤；重复安装不再发送多余的自检消息
 
 自动化安装用 `curl -fsSL https://raw.githubusercontent.com/leeguooooo/wechat-use/main/install.sh | WECHAT_USE_PREFER_419=yes bash`。设为 `no` 会取消安装。已有本地 4.1.9 时，可传 `WECHAT_419_SOURCE=/path/to/WeChat-4.1.9.app`。
+
+AI agent skill 是可选项。无交互终端时自动跳过，不报终端读取错误；交互询问默认不安装，30 秒未回答也会跳过。自动化安装可用 `WECHAT_USE_INSTALL_SKILL=yes` 明确选择安装，或设为 `no` 跳过。已检测到 skill 时只显示更新命令，不覆盖用户现有内容。
 
 打开新副本扫码登录，再运行 `wechat-use init`。以后直接运行工具即可，CLI 和后台服务都会使用该副本。副本未启动时会提示打开，不会改用主微信。设置保存在 `~/.wx-rs/managed-wechat.json`，旧账号配置保持原样。
 
@@ -58,34 +60,19 @@ curl -fsSL https://raw.githubusercontent.com/leeguooooo/wechat-use/main/install.
 
 ## 3. 授权「辅助功能」（TCC）<a id="tcc"></a>
 
-**首次用 `wechat-use send` 前必须做一次，不做会静默失败。**
-
-macOS Sonoma 起，跨进程合成键盘事件的发送方必须在「辅助功能」清单里，否则系统直接把事件丢掉，无错误码无日志。`wechat-bridge` / `wechatd` 走这个 API，必须授权。
-
-打开下面两条，一条弹设置窗口、一条进入文件位置方便拖：
+安装器会检查后台服务的实际授权。已经通过的用户不需要重新勾选；未通过时运行：
 
 ```bash
-open "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
-open "$HOME/.local/bin"                    # Finder 打开，选中 wechat-bridge 拖进设置窗
+wechat-use doctor --fix-tcc
 ```
 
-然后：
-
-1. 系统设置 → 隐私与安全 → **辅助功能**
-2. 点 `+`，选 `$HOME/.local/bin/wechat-bridge`，加进清单
-3. 打开右侧开关
-4. 重启已经跑起来的 bridge，让它继承新权限：
-   - LaunchAgent：`launchctl kickstart -k gui/$(id -u)/ai.wechat.bridge`
-   - 手工启的：`pkill wechat-bridge; wechat-bridge &`
-
-> `wechatd` 不用单独加，TCC 按 responsible-process 链继承 `wechat-bridge` 的授权。
-> Input Monitoring / 输入监控 不参与 `wechat-use send` 路径，可以忽略。
+按引导打开「系统设置 → 隐私与安全 → 辅助功能」，检查安装目录中的 `wechat-bridge` 和 `wechatd` 两个程序。不要重置其他应用的授权。终端里单独运行 bridge 得到的授权状态，不能代替后台服务检查。
 
 确认授权到位：
 
 ```bash
-wechat-use doctor --json | jq '.checks[] | select(.name=="ax_trusted")'
-# → {"name":"ax_trusted","ok":true,"detail":"wechatd /Users/..../wechatd"}
+wechat-use doctor --json | jq '.checks[] | select(.name=="daemon_accessibility")'
+# ok=true 且 detail 包含 ax_trusted=true
 ```
 
 ---

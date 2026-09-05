@@ -272,6 +272,10 @@ warn_if_wechat_lacks_get_task_allow() {
 # Skipped silently when prerequisites (init / auth / WeChat running)
 # aren't in place — this is a smoke test, not an init replacement.
 maybe_smoke_send() {
+  if [[ "${SERVICES_REUSED:-0}" == 1 ]]; then
+    info '保留现有服务，跳过重复测试消息。'
+    return 0
+  fi
   local config_file="${HOME}/.wx-rs/com_tencent_xinWeChat419WechatUse/config.json"
   # Init hasn't run → no key, no daemon — silent skip.
   if [[ ! -f "${config_file}" ]]; then
@@ -280,7 +284,7 @@ maybe_smoke_send() {
   # Auth: just probe whether the CLI can read a token. v1.9+ refuses
   # to send without an activated token; surfacing that here would
   # confuse a fresh installer who hasn't activated yet.
-  if ! "${INSTALL_DIR}/wechat" auth status >/dev/null 2>&1; then
+  if [[ "$(installer_subscription_state)" != active ]]; then
     info "filehelper smoke send 已跳过（激活码未激活；激活后跑：wechat send 'hi' filehelper）"
     return 0
   fi
@@ -356,13 +360,17 @@ find_preferred_wechat_source() {
 }
 
 choose_preferred_wechat_419() {
+  local choice="${WECHAT_USE_PREFER_419:-ask}"
+  if [[ "$choice" == ask ]] && previous_clone_choice_is_valid; then
+    info "复用已确认的独立副本：$PREFERRED_WECHAT_NAME"
+    return 0
+  fi
   printf '\n微信 4.1.9 独立副本\n'
   printf '  wechat-use 专注兼容微信 4.1.9，功能支持最全、使用体验最好。\n'
   printf '  同意后自动安装独立副本，工具默认使用它；主微信程序和聊天数据保持原样。\n'
   printf '  副本需要单独登录，自动更新会关闭，以保持 4.1.9。\n\n'
-  local choice="${WECHAT_USE_PREFER_419:-ask}"
   if [[ "$choice" == ask ]]; then
-    if { exec 3<>/dev/tty; } 2>/dev/null; then
+    if open_install_tty; then
       printf '[install] 安装并使用微信 4.1.9 独立副本？[Y/n] ' >&3
       IFS= read -r choice <&3 || choice=skip
       exec 3>&-
@@ -379,6 +387,18 @@ choose_preferred_wechat_419() {
       return 2 ;;
     *) err "无法识别选择：$choice"; return 2 ;;
   esac
+}
+
+previous_clone_choice_is_valid() {
+  local config="${1:-$HOME/.wx-rs/managed-wechat.json}" target
+  [[ -d "$PREFERRED_WECHAT_TARGET" && -f "$config" ]] || return 1
+  supported_419_source "$PREFERRED_WECHAT_TARGET" || return 1
+  [[ "$(wechat_app_bundle_id "$PREFERRED_WECHAT_TARGET")" == "$PREFERRED_WECHAT_BUNDLE_ID" ]] || return 1
+  target=$(cd "$PREFERRED_WECHAT_TARGET" && pwd -P) || return 1
+  [[ "$(plutil -extract app_path raw -o - "$config" 2>/dev/null)" == "$target" &&
+     "$(plutil -extract bundle_id raw -o - "$config" 2>/dev/null)" == "$PREFERRED_WECHAT_BUNDLE_ID" &&
+     "$(plutil -extract version raw -o - "$config" 2>/dev/null)" == 4.1.9 &&
+     "$(plutil -extract build raw -o - "$config" 2>/dev/null)" == "$(wechat_app_build "$target")" ]]
 }
 
 cleanup_install_stage() {
@@ -561,7 +581,6 @@ maybe_offer_preferred_wechat_419() {
   export WECHAT_TARGET_BUNDLE_ID="$PREFERRED_WECHAT_BUNDLE_ID"
   unset WECHAT_TARGET_PID WECHAT_TARGET_WXID
   success "工具已默认使用微信 4.1.9 独立副本：$PREFERRED_WECHAT_TARGET"
-  info '打开该副本并扫码登录，然后运行 wechat-use init。主微信无需退出。'
 }
 
 prepare_preferred_wechat_419() {
@@ -596,6 +615,176 @@ install_binary_atomically() {
   return 1
 }
 
+installed_binary_matches_staged() {
+  [[ -f "$2" && -x "$2" && ! -L "$2" ]] && cmp -s "$1" "$2"
+}
+
+installer_json_value() {
+  printf '%s' "$1" | plutil -extract "$2" raw -o - - 2>/dev/null
+}
+
+installer_check_ok() {
+  printf '%s' "$1" | python3 -c '
+import json, sys
+try:
+    report = json.load(sys.stdin)
+    checks = [c for c in report["checks"] if c.get("name") == sys.argv[1]]
+    valid = len(checks) == 1 and checks[0].get("ok") is True
+except (ValueError, KeyError, TypeError, AttributeError):
+    valid = False
+sys.exit(0 if valid else 1)
+' "$2" 2>/dev/null
+}
+
+wechatd_ax_trusted() {
+  local report
+  report=$("$INSTALL_DIR/wechat" doctor --json 2>/dev/null) || return 1
+  installer_check_ok "$report" daemon_accessibility
+}
+
+can_reuse_running_services() {
+  [[ "${BINARIES_CHANGED:-1}" == 0 && "${CLONE_SELECTION_UNCHANGED:-0}" == 1 ]] || return 1
+  local plist="${LAUNCHAGENT_PLIST:-$HOME/Library/LaunchAgents/ai.wechat.bridge.plist}" registered health bridge_pid daemon_pid
+  [[ -f "$plist" ]] || return 1
+  [[ "$(plutil -extract ProgramArguments.0 raw -o - "$plist" 2>/dev/null)" == "$INSTALL_DIR/wechat-bridge" ]] || return 1
+  registered=$(launchctl print "gui/$(id -u)/ai.wechat.bridge" 2>/dev/null) || return 1
+  [[ "$(printf '%s\n' "$registered" | awk -F ' = ' '/^[[:space:]]*program = / {print $2; exit}')" == "$INSTALL_DIR/wechat-bridge" ]] || return 1
+  bridge_pid=$(printf '%s\n' "$registered" | awk '/^[[:space:]]*pid = / {print $3; exit}')
+  [[ "$bridge_pid" =~ ^[1-9][0-9]*$ ]] || return 1
+  health=$(curl -fsS --connect-timeout 2 --max-time 5 http://127.0.0.1:18400/health) || return 1
+  [[ "$(installer_json_value "$health" bridge_version)" == "${LATEST_TAG#v}" &&
+     "$(installer_json_value "$health" daemon.version)" == "${LATEST_TAG#v}" &&
+     "$(installer_json_value "$health" daemon.alive)" == true ]] || return 1
+  daemon_pid=$(installer_json_value "$health" daemon.pid) || return 1
+  [[ "$daemon_pid" =~ ^[1-9][0-9]*$ ]] || return 1
+  [[ "$(ps -p "$bridge_pid" -o comm= 2>/dev/null)" == "$INSTALL_DIR/wechat-bridge" &&
+     "$(ps -p "$daemon_pid" -o comm= 2>/dev/null)" == "$INSTALL_DIR/wechatd" &&
+     "$(ps -p "$daemon_pid" -o ppid= 2>/dev/null | tr -d ' ')" == "$bridge_pid" ]] || return 1
+  wechatd_ax_trusted || return 1
+  # A doctor probe must not have switched/restarted the daemon behind the
+  # parent/path checks above (e.g. a simultaneous repair in another terminal).
+  health=$(curl -fsS --connect-timeout 2 --max-time 5 http://127.0.0.1:18400/health) || return 1
+  [[ "$(installer_json_value "$health" daemon.pid)" == "$daemon_pid" &&
+     "$(installer_json_value "$health" daemon.alive)" == true ]]
+}
+
+run_service_phase() {
+  if can_reuse_running_services; then
+    SERVICES_REUSED=1
+    success '版本文件未变，已验证的后台服务保持运行，无需重启。'
+  else
+    SERVICES_REUSED=0
+    reset_wechat_services
+  fi
+}
+
+install_launchagent_dir() {
+  printf '%s/Library/LaunchAgents\n' "$HOME"
+}
+
+installer_subscription_state() {
+  local status
+  if ! status=$("$INSTALL_DIR/wechat" auth status 2>/dev/null); then printf 'unknown\n'; return; fi
+  # auth status exits zero even when missing/expired; require explicit text.
+  case "$status" in
+    *'✓ 有效'*) printf 'active\n' ;;
+    *'尚未激活'*) printf 'missing\n' ;;
+    *'已过期'*|*'已吊销'*) printf 'inactive\n' ;;
+    *) printf 'unknown\n' ;;
+  esac
+}
+
+print_install_next_steps() {
+  local report="$1" subscription="$2" bridge_ok="$3" pending=0 doctor_shown=0
+  printf '\n安装结果\n  副本：%s\n  路径：%s\n' "$PREFERRED_WECHAT_NAME" "$PREFERRED_WECHAT_TARGET"
+  if [[ "$subscription" == active && "$bridge_ok" == 1 &&
+        "$(installer_json_value "$report" status)" == ok &&
+        "$(installer_json_value "$report" query_ready)" == true &&
+        "$(installer_json_value "$report" send_ready)" == true ]] &&
+      installer_check_ok "$report" wechat_running &&
+      installer_check_ok "$report" daemon_accessibility &&
+      installer_check_ok "$report" config_present &&
+      installer_check_ok "$report" key_file_present; then
+    success '已就绪，无需重新激活、授权或初始化。'
+    info '查看会话：wechat-use sessions；诊断问题：wechat-use doctor'
+    return 0
+  fi
+  info '工具已安装，尚未完成的步骤如下：'
+  case "$subscription" in
+    missing) step '激活：wechat-use auth activate <激活码>'; info '申请激活码：https://t.me/WechatCliBot'; pending=1 ;;
+    inactive) step '续订：wechat-use auth renew（无需重新激活）'; pending=1 ;;
+    active) : ;;
+    *) step '确认订阅状态：wechat-use auth status'; pending=1 ;;
+  esac
+  if ! installer_json_value "$report" status >/dev/null; then
+    step '未能读取体检结果，请运行：wechat-use doctor'
+    return 0
+  fi
+  if ! installer_check_ok "$report" wechat_running; then
+    step "打开「${PREFERRED_WECHAT_NAME}」，按提示完成登录。主微信无需退出。"
+    pending=1
+  fi
+  if ! installer_check_ok "$report" daemon_accessibility; then
+    step '辅助功能授权：wechat-use doctor --fix-tcc'
+    info "只需检查 $INSTALL_DIR/wechat-bridge 和 $INSTALL_DIR/wechatd，不要重置其他应用权限。"
+    pending=1
+  elif [[ "$bridge_ok" != 1 ]]; then
+    step '后台服务尚未就绪，请运行：wechat-use doctor'
+    pending=1; doctor_shown=1
+  fi
+  if ! installer_check_ok "$report" config_present || ! installer_check_ok "$report" key_file_present; then
+    step '副本登录后初始化：wechat-use init'
+    pending=1
+  elif [[ "$(installer_json_value "$report" query_ready)" != true ]]; then
+    if [[ "$doctor_shown" == 0 ]]; then step '检查读取配置：wechat-use doctor'; fi
+    pending=1
+  elif [[ "$(installer_json_value "$report" send_ready)" != true ]]; then
+    step '登录并打开任意聊天后验证：wechat-use send "安装验证" filehelper'
+    pending=1
+  fi
+  if [[ "$pending" == 0 ]]; then step '检查剩余问题：wechat-use doctor'; fi
+}
+
+open_install_tty() {
+  { exec 3<>/dev/tty; } 2>/dev/null
+}
+
+read_optional_install_choice() {
+  if open_install_tty; then
+    printf '[install] 安装 AI agent skill？[y/N]（30 秒内未选择则跳过） ' >&3
+    local answer=''
+    IFS= read -r -t 30 answer <&3 || answer=no
+    exec 3>&-
+    printf '%s\n' "$answer"
+  else
+    return 1
+  fi
+}
+
+offer_agent_skill_install() {
+  local choice="${WECHAT_USE_INSTALL_SKILL:-ask}"
+  local skill_file="$HOME/.agents/skills/wechat-use/SKILL.md"
+  if [[ "$choice" == ask && -f "$skill_file" ]]; then
+    info '已检测到 wechat-use skill；更新命令：npx -y skills add leeguooooo/wechat-use -y -g'
+    return 0
+  fi
+  if ! command -v npx >/dev/null 2>&1; then
+    info '可选：安装 Node.js 后，用 npx -y skills add leeguooooo/wechat-use -y -g 接入 AI agent。'
+    return 0
+  fi
+  if [[ "$choice" == ask ]]; then
+    # Check the caller's terminal before command substitution redirects stdout.
+    if [[ -t 1 ]]; then choice=$(read_optional_install_choice) || choice=no
+    else choice=no; fi
+  fi
+  case "$choice" in
+    y|Y|yes|YES|Yes|1|true|是)
+      if npx -y skills add leeguooooo/wechat-use -y -g; then success 'wechat-use skill 已安装。'
+      else warn 'skill 未安装成功，不影响 CLI；可稍后重试。'; fi ;;
+    *) info '未安装可选 skill。需要时运行：npx -y skills add leeguooooo/wechat-use -y -g' ;;
+  esac
+}
+
 if [[ "${WECHAT_USE_INSTALL_LIB_ONLY:-0}" == "1" ]]; then
   return 0 2>/dev/null || exit 0
 fi
@@ -609,6 +798,7 @@ if [[ "$(uname -m)" != "arm64" ]]; then
   exit 1
 fi
 
+step '1/4 确认独立微信副本'
 choose_preferred_wechat_419 || exit $?
 mkdir -p "${INSTALL_DIR}" 2>/dev/null || true
 STAGE=$(mktemp -d)
@@ -619,11 +809,15 @@ trap cleanup_install_stage EXIT
 # round-trip, but following the redirect to a specific tag lets us
 # print the version up front and also cleanly handles the case where
 # the tarball name is version-suffixed.
-LATEST_TAG=$(curl -fsSLI -o /dev/null -w '%{url_effective}' \
+step '2/4 检查并下载工具版本'
+if ! LATEST_TAG=$(curl -fsSLI --connect-timeout 20 --max-time 60 -o /dev/null -w '%{url_effective}' \
   "https://github.com/${REPO}/releases/latest" 2>/dev/null \
-  | sed -E 's#.*/tag/##')
-if [[ -z "${LATEST_TAG}" ]]; then
-  err "无法解析最新 release tag（网络/GitHub API 不可达？）"
+  | sed -E 's#.*/tag/##'); then
+  err '无法连接版本服务器，现有安装未修改；请稍后重试。'
+  exit 1
+fi
+if [[ ! "$LATEST_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  err '未取得有效版本号，现有安装未修改；请稍后重试。'
   exit 1
 fi
 info "最新版本：${LATEST_TAG}"
@@ -631,12 +825,12 @@ info "最新版本：${LATEST_TAG}"
 TARBALL="wechat-${LATEST_TAG}-darwin-arm64.tar.gz"
 BASE_URL="https://github.com/${REPO}/releases/download/${LATEST_TAG}"
 info "下载 ${TARBALL}"
-if ! curl -fsSL "${BASE_URL}/${TARBALL}" -o "${STAGE}/${TARBALL}"; then
+if ! curl -fsSL --retry 2 --connect-timeout 20 --max-time 300 "${BASE_URL}/${TARBALL}" -o "${STAGE}/${TARBALL}"; then
   err "无法下载 ${TARBALL}，release 可能缺少此文件。"
   exit 1
 fi
 info "下载 SHA256SUMS"
-if ! curl -fsSL "${BASE_URL}/SHA256SUMS" -o "${STAGE}/SHA256SUMS.release"; then
+if ! curl -fsSL --retry 2 --connect-timeout 20 --max-time 60 "${BASE_URL}/SHA256SUMS" -o "${STAGE}/SHA256SUMS.release"; then
   err "无法下载 SHA256SUMS，release 可能缺少此文件。"
   exit 1
 fi
@@ -668,8 +862,17 @@ success "SHA-256 校验通过"
 
 # Prepare the required clone using verified staged binaries BEFORE replacing
 # any installed CLI or touching its LaunchAgents. Failures stay recoverable.
+for BIN_NAME in "${BINS[@]}"; do
+  [[ -s "$STAGE/$BIN_NAME" && -f "$STAGE/$BIN_NAME" && ! -L "$STAGE/$BIN_NAME" ]] || {
+    err "安装包缺少有效的 $BIN_NAME，原安装未修改。"; exit 1;
+  }
+done
+step '3/4 准备工具专用微信（主微信保持原样）'
+CLONE_SELECTION_UNCHANGED=0
+if previous_clone_choice_is_valid; then CLONE_SELECTION_UNCHANGED=1; fi
 prepare_preferred_wechat_419 || exit 1
 
+BINARIES_CHANGED=0
 for BIN_NAME in "${BINS[@]}"; do
   SRC="${STAGE}/${BIN_NAME}"
   if [[ ! -s "${SRC}" ]]; then
@@ -685,6 +888,11 @@ for BIN_NAME in "${BINS[@]}"; do
   # who expected `.prev` to mean "the version before THIS one and that's
   # it". Now `.prev` is N-1, `.prev2` is N-2.
   DEST="${INSTALL_DIR}/${BIN_NAME}"
+  if installed_binary_matches_staged "$SRC" "$DEST"; then
+    info "$BIN_NAME 文件未变，保留现有文件和回滚备份。"
+    continue
+  fi
+  BINARIES_CHANGED=1
   # v1.16.0+: prior install may have left wechatd / wechat-bridge as a
   # symlink to ~/Applications/WechatSkillHelper.app/Contents/MacOS/<bin>.
   # `install -m 755` over a symlink is system-dependent — pre-emptively
@@ -791,7 +999,9 @@ echo ""
 # 实际二进制仍叫 `wechat`，这里建一个 `wechat-use` → `wechat` 软链，两个名字等价。
 # 旧脚本 / 文档里的 `wechat ...` 继续可用，新文档统一用 `wechat-use ...`。
 WECHAT_USE_LINK="${INSTALL_DIR}/wechat-use"
-if [[ -w "${INSTALL_DIR}" ]]; then
+if [[ -L "$WECHAT_USE_LINK" && "$(readlink "$WECHAT_USE_LINK")" == wechat ]]; then
+  info 'wechat-use 命令别名已就绪。'
+elif [[ -w "${INSTALL_DIR}" ]]; then
   rm -f "${WECHAT_USE_LINK}"
   ln -s wechat "${WECHAT_USE_LINK}"
 else
@@ -868,6 +1078,7 @@ for BIN in wechat wechatd wechat-bridge wechat-mcp wechat-wechaty-gateway; do
   fi
 done
 
+reset_wechat_services() {
 # Reset all wechat LaunchAgents in one shot.
 #
 # 2026-05-18: 之前这里只处理 ai.wechat.bridge,但用户机上可能还存在
@@ -884,7 +1095,7 @@ done
 # Why not `launchctl kickstart -k`: kickstart 只重执行进程,不重读 plist
 # 的 EnvironmentVariables,也不重置 launchd 缓存的 responsibility chain。
 # bootout + bootstrap 是唯一彻底重置的方式。
-LAUNCHAGENT_DIR="$HOME/Library/LaunchAgents"
+LAUNCHAGENT_DIR=$(install_launchagent_dir)
 LAUNCHAGENT_PLIST="${LAUNCHAGENT_DIR}/ai.wechat.bridge.plist"  # 兼容下文 health 探测
 WECHAT_AGENT_PLISTS=()
 if [[ -d "${LAUNCHAGENT_DIR}" ]]; then
@@ -1039,13 +1250,17 @@ if (( ${#WECHAT_AGENT_PLISTS[@]} > 0 )); then
       warn "  下面 TCC 检查会进一步确认；如果是端口冲突跑：lsof -nP -iTCP:18400 | grep LISTEN"
     fi
   fi
-elif launchctl list 2>/dev/null | grep -q ai.wechat.bridge; then
+elif [[ ! -f "$BRIDGE_PLIST_PATH" ]] && launchctl list 2>/dev/null | grep -q ai.wechat.bridge; then
   info "LaunchAgent 注册但 plist 不在标准路径，用 kickstart 重启"
   launchctl kickstart -k "gui/$(id -u)/ai.wechat.bridge" 2>/dev/null || true
   if ! wait_for_bridge_health; then
     dump_bridge_diag "LaunchAgent kickstart 后 /health 仍无响应"
   fi
 fi
+}
+
+step '4/4 检查后台服务与剩余设置'
+run_service_phase
 
 # Drive the TCC remediation flow. Three branches:
 #   - interactive TTY → exec doctor --fix-tcc inline
@@ -1114,32 +1329,6 @@ remediate_tcc_grant() {
   fi
 }
 
-# Probe wechatd's AX trust. Bridge /health 200 doesn't tell us anything
-# about wechatd — bridge can serve HTTP fine while wechatd silently fails
-# on every send. The doctor probe runs AXIsProcessTrusted() from the
-# daemon's own process, which is the only check that catches this.
-# Returns 0 if explicitly trusted, 1 otherwise.
-#
-# FAIL-CLOSED on purpose (codex review Q3): we look for the success line
-# explicitly. If doctor output format shifts (field renamed, JSON-ified,
-# doctor crashes silently, etc.), absence of the success marker means
-# "treat as untrusted" → user gets one extra TCC prompt. The opposite
-# (look for FAIL marker, treat absence as OK) silently fails open the
-# moment doctor changes wording — exactly the regression we're trying
-# to prevent.
-wechatd_ax_trusted() {
-  local doc_out
-  doc_out=$("${INSTALL_DIR}/wechat" doctor 2>&1 || true)
-  # Success line shape: "✓ daemon_accessibility  OK ax_trusted=true ..."
-  # Require BOTH the daemon_accessibility key AND ax_trusted=true on the
-  # same line. Anything else (FAIL line, missing line, garbled output)
-  # → return 1.
-  if echo "$doc_out" | grep -E 'daemon_accessibility' | grep -qE 'ax_trusted=true'; then
-    return 0
-  fi
-  return 1
-}
-
 # TCC / health verification. Ground truth: /health 200 from the
 # launchd-spawned bridge AND wechatd's AXIsProcessTrusted() == true.
 #
@@ -1160,8 +1349,7 @@ if wait_for_bridge_health_retry; then
     maybe_smoke_send
     echo ""
   else
-    warn "bridge /health OK，但 wechatd AXIsProcessTrusted = false —— 升级把 TCC 弄丢了"
-    warn "  典型场景：install.sh 升级覆盖了 wechatd 二进制（cdhash 变 → macOS 视为新 app）"
+    warn '后台接口可用，但未能确认 wechatd 的辅助功能授权，请继续检查。'
     remediate_tcc_grant
   fi
 elif bridge_log_says_tcc_missing; then
@@ -1170,12 +1358,7 @@ else
   # /health failed but TCC isn't the cause — most likely port 18400
   # occupied or plist env wrong. Diag was already dumped right after
   # bootstrap; just point at the next step.
-  warn "bridge /health 没起来，但日志里没看到 TCC missing 字样"
-  warn "  ✓ 如果你是 **首次安装** 这一行通常是正常的 —— 你下面还没授权辅助功能，"
-  warn "    bridge crash-restart 中。完成下面 step 2 (授权辅助功能) 后,bridge 会"
-  warn "    自动起来,跑 \`wechat doctor\` 一次就全绿了。"
-  warn "  ✗ 如果你已经授权过辅助功能 / 升级一次后 yellow:可能是另一进程占用 18400"
-  warn "    (lsof -nP -iTCP:18400 | grep LISTEN) 或 plist env 配置错。"
+  warn '后台服务未就绪，日志未显示明确的辅助功能授权错误。请运行 wechat-use doctor 排查，不要反复重置授权。'
   echo ""
 fi
 
@@ -1202,30 +1385,11 @@ if [[ -f "${PREFERRED_WECHAT_TARGET}/Contents/Info.plist" ]]; then
   DETECTED_WECHAT_BUILD=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' \
     "${PREFERRED_WECHAT_TARGET}/Contents/Info.plist" 2>/dev/null || echo "")
 fi
-WECHAT_DETECTED_LINE=""
-if [[ -n "${DETECTED_WECHAT_VERSION}" ]]; then
-  # Per-build 兼容矩阵交给运行时 `wechat doctor` + profile API 判定;
-  # install.sh 只做大版本号粗判,版本不在 SUPPORTED 清单内时给个 yellow
-  # 提示,具体是否适配请跑 `wechat doctor`。
-  if echo "${SUPPORTED_WECHAT_VERSIONS}" | grep -qw "${DETECTED_WECHAT_VERSION%.*}.x" \
-     || echo "${SUPPORTED_WECHAT_VERSIONS}" | grep -qw "${DETECTED_WECHAT_VERSION}"; then
-    WECHAT_DETECTED_LINE="${C_GREEN}✓${C_RESET} 检测到 WeChat ${DETECTED_WECHAT_VERSION}，在支持的大版本范围内（具体适配以 \`wechat doctor\` 为准）"
-  else
-    WECHAT_DETECTED_LINE="${C_YELLOW}!${C_RESET} 检测到 WeChat ${DETECTED_WECHAT_VERSION}，${C_YELLOW}不在 ${SUPPORTED_WECHAT_VERSIONS} 范围内${C_RESET}，请跑 \`wechat doctor\` 查看支持状态"
-  fi
+printf '\n版本：wechat %s / wechatd %s / 工具微信 %s（%s）\n' \
+  "$INSTALLED_VER" "$INSTALLED_DAEMON_VER" "${DETECTED_WECHAT_VERSION:-未检测到}" "${DETECTED_WECHAT_BUILD:-未知构建}"
+if [[ "$DETECTED_WECHAT_VERSION" != "$PREFERRED_WECHAT_VERSION" ]]; then
+  warn "独立副本版本需要检查：$PREFERRED_WECHAT_TARGET；请运行 wechat-use doctor。"
 fi
-
-printf '%s版本信息%s\n' "${C_BOLD}" "${C_RESET}"
-printf '  %s%-22s%s %s\n' "${C_DIM}" "wechat (CLI)" "${C_RESET}" "${INSTALLED_VER}"
-printf '  %s%-22s%s %s\n' "${C_DIM}" "wechatd (daemon)" "${C_RESET}" "${INSTALLED_DAEMON_VER}"
-printf '  %s%-22s%s %s\n' "${C_DIM}" "支持的 WeChat 版本" "${C_RESET}" "${SUPPORTED_WECHAT_VERSIONS}"
-printf '  %s%-22s%s %s\n' "${C_DIM}" "兼容矩阵" "${C_RESET}" "运行 \`wechat doctor\` 查看当前 WeChat 是否在适配列表内"
-if [[ -n "${WECHAT_DETECTED_LINE}" ]]; then
-  printf '  %s%-22s%s %b\n' "${C_DIM}" "本机 WeChat" "${C_RESET}" "${WECHAT_DETECTED_LINE}"
-else
-  printf '  %s%-22s%s %s未检测到 /Applications/WeChat.app%s\n' "${C_DIM}" "本机 WeChat" "${C_RESET}" "${C_YELLOW}" "${C_RESET}"
-fi
-printf '  %s%-22s%s %s\n' "${C_DIM}" "WeChat 下载（验证版）" "${C_RESET}" "${WECHAT_DOWNLOAD_URL}"
 echo ""
 
 # Auto-add INSTALL_DIR to PATH if missing. Idempotent: only inserts if
@@ -1346,84 +1510,11 @@ case ":$PATH:" in
     ;;
 esac
 
-printf '%s下一步 —— 按顺序执行：%s\n\n' "${C_BOLD}" "${C_RESET}"
-
-step "$(cmd 'wechat auth activate <激活码>')"
-printf '    %sv1.9.1 起需先输入激活码。无激活码？跟 Telegram 机器人申请：%s\n' "${C_DIM}" "${C_RESET}"
-printf '    %s频道公告：https://t.me/wechatuse%s\n' "${C_DIM}" "${C_RESET}"
-printf '    %s交流群：https://t.me/Wechatuse_talk （可选，畅所欲言 / 求助）%s\n' "${C_DIM}" "${C_RESET}"
-printf '    %s申请机器人：https://t.me/WechatCliBot （/start 看说明，激活码走人工审核，⚠️ 仅个人研究用途，商业/对外服务一律拒绝）%s\n\n' "${C_DIM}" "${C_RESET}"
-
-step "$(cmd '授权 wechat-bridge 进「辅助功能」（首次必做，不做 send 静默失败）')"
-printf '    %smacOS Sonoma+ 下跨进程合成键盘事件需要 TCC Accessibility 授权。一条龙：%s\n' "${C_DIM}" "${C_RESET}"
-printf '    %s  open "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"%s\n' "${C_DIM}" "${C_RESET}"
-printf '    %s  open "%s"%s   # Finder 打开，把 wechat-bridge 拖进设置窗\n' "${C_DIM}" "${INSTALL_DIR}" "${C_RESET}"
-printf '    %s路径就是：%s%s/wechat-bridge%s\n' "${C_DIM}" "${C_CYAN}" "${INSTALL_DIR}" "${C_RESET}"
-printf '    %s勾选 ✓ 后，已运行的 bridge 要重启才继承授权：pkill wechat-bridge（下次 send 自动重拉）%s\n\n' "${C_DIM}" "${C_RESET}"
-
-step "$(cmd 'wechat doctor')"
-printf '    %s体检：调试环境 / WeChat / 签名 / key / daemon / binary 指纹 / ax_trusted 一行看完。%s\n\n' "${C_DIM}" "${C_RESET}"
-
-step "$(cmd 'wechat init')"
-printf '    %s抓取数据库解密 key,自动按 WeChat 版本选提取路径。WeChat 重启 / 切换账号后需要重新跑一次。%s\n\n' "${C_DIM}" "${C_RESET}"
-
-step "$(cmd 'wechat send "来自 CLI 的消息" filehelper')"
-printf '    %s发消息。daemon 自动起，热路径约 700ms。%s\n\n' "${C_DIM}" "${C_RESET}"
-
-step "$(cmd 'wechat auth status')"
-printf '    %s查激活状态 + 剩余天数。到期后 `wechat auth renew` 看如何重新提交审核。%s\n\n' "${C_DIM}" "${C_RESET}"
-
-step "$(cmd 'wechat doctor')  ${C_DIM}（任何时候出问题先跑这个）${C_RESET}"
-
-# ─────────────────────────────────────────────────────────────────────
-# 可选：装 wechat-use 进 Claude Code / Codex / Cursor 等 agent runner
-# ─────────────────────────────────────────────────────────────────────
-#
-# 装好 CLI 之后,大部分用户立刻就会想"接 AI agent"。如果检测到 Claude
-# Code 已经在用(`~/.claude/` 存在)+ npx 可跑,我们 prompt 一下让用户
-# 顺手装 skill,免去 README 跳来跳去。
-#
-# 仍是 opt-in:不强装,curl|bash piped 模式下默认 skip(stdin 不可控),
-# 永远打印"手动装"hint 兜底。
-printf '\n%s—— 接 AI agent (可选) ——%s\n\n' "${C_BOLD}" "${C_RESET}"
-
-# Skill 装到 `~/.agents/skills/`(`npx skills add -g` 的标准位置),Claude Code /
-# Codex / Cursor / Claude Desktop 等读这个目录的 agent runner 都会用到。
-# 所以我们只检测 npx 是否能跑,不挑 agent —— 装上谁用谁的事。
-if command -v npx >/dev/null 2>&1; then
-  SKILL_CMD="npx -y skills add leeguooooo/wechat-use -y -g"
-  info "检测到 npx,可以一键装 wechat-use 进 ~/.agents/skills/"
-  printf '    %s任何读这个目录的 agent(Claude Code / Codex / Cursor / Claude Desktop / …)%s\n' "${C_DIM}" "${C_RESET}"
-  printf '    %s下次启动自动学会 sessions / history / send / sent 等全部命令%s\n' "${C_DIM}" "${C_RESET}"
-  printf '    %s命令:%s %s\n\n' "${C_DIM}" "${C_RESET}" "$(cmd "$SKILL_CMD")"
-
-  # 尝试拿 /dev/tty(curl|bash 模式下 stdin 已被 piped,但 tty 仍可用)。
-  # 拿不到就 skip prompt,只打 hint,跟 rustup / oh-my-zsh 相同 pattern。
-  answer=""
-  if [ -r /dev/tty ]; then
-    printf '%s[install] 现在装吗?[Y/n] %s' "${C_YELLOW}" "${C_RESET}"
-    IFS= read -r answer </dev/tty || answer="__SKIP__"
-  else
-    info "(非交互模式,跳过自动装。复制上面那条命令自己跑就行)"
-    answer="__SKIP__"
-  fi
-
-  case "${answer:-}" in
-    n|N|no|NO|"否"|"拒绝"|__SKIP__)
-      info "跳过 skill 自动装。需要时手动跑上面的命令。"
-      ;;
-    *)
-      info "装 skill 中…(npx 第一次跑会拉 ~5MB 包,可能要 10-30s)"
-      if $SKILL_CMD; then
-        success "wechat-use 已装到 ~/.agents/skills/wechat-use/。下次 agent 启动自动加载。"
-      else
-        warn "skill 安装失败。可以手动重试上面的命令;不影响 CLI 本身工作。"
-      fi
-      ;;
-  esac
-else
-  info "未检测到 npx(需要 Node.js)。"
-  printf '    %s如果你用 Claude Code / Codex / Cursor 等 agent,装好 Node.js 后跑:%s\n' "${C_DIM}" "${C_RESET}"
-  printf '    %s%s\n' "  " "$(cmd 'npx -y skills add leeguooooo/wechat-use -y -g')"
-  printf '\n'
-fi
+# One current snapshot; print only incomplete steps, never ask configured users
+# to reactivate/reinitialize merely because they ran the installer again.
+FINAL_DOCTOR_REPORT=$("$INSTALL_DIR/wechat" doctor --json 2>/dev/null || true)
+FINAL_SUBSCRIPTION_STATE=$(installer_subscription_state)
+FINAL_BRIDGE_OK=0
+if curl -fsS --connect-timeout 2 --max-time 5 http://127.0.0.1:18400/health >/dev/null 2>&1; then FINAL_BRIDGE_OK=1; fi
+print_install_next_steps "$FINAL_DOCTOR_REPORT" "$FINAL_SUBSCRIPTION_STATE" "$FINAL_BRIDGE_OK"
+offer_agent_skill_install
