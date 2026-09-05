@@ -11,13 +11,15 @@ INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 
 # Supported WeChat versions (高层版本号). Per-build 兼容矩阵在运行时通过
 # `wechat doctor` + profile API 查询,这里只列大版本号让用户快速判断。
-SUPPORTED_WECHAT_VERSIONS="4.0.x, 4.1.x"
+SUPPORTED_WECHAT_VERSIONS="4.1.9"
 SUPPORTED_WECHAT_BUILDS=""
-WECHAT_DOWNLOAD_URL="https://mac.weixin.qq.com/en"
+WECHAT_DOWNLOAD_URL="https://dldir1v6.qq.com/weixin/Universal/Mac/WeChatMac_4.1.9.dmg"
+WECHAT_419_DMG_URL="$WECHAT_DOWNLOAD_URL"
+WECHAT_419_DMG_SHA256="0e8510d1a004fe6373aa0ad1806d73d4bcf9a32f0c62284d8eb82cefe2b78d06"
 PREFERRED_WECHAT_VERSION="4.1.9"
 PREFERRED_WECHAT_SOURCE="${WECHAT_419_SOURCE:-}"
-PREFERRED_WECHAT_TARGET="${WECHAT_419_TARGET:-/Applications/WeChat-4.1.9-wechat-use.app}"
-PREFERRED_WECHAT_BUNDLE_ID="${WECHAT_419_BUNDLE_ID:-com.tencent.xinWeChat419WechatUse}"
+PREFERRED_WECHAT_TARGET="${WECHAT_419_TARGET:-$HOME/Applications/WeChat-4.1.9-wechat-use.app}"
+PREFERRED_WECHAT_BUNDLE_ID="com.tencent.xinWeChat419WechatUse"
 PREFERRED_WECHAT_NAME="${WECHAT_419_NAME:-WeChat 4.1.9 (wechat-use)}"
 
 # ANSI color helpers — only emit if stderr/stdout is a tty so logs piped to
@@ -201,7 +203,7 @@ EOF
 #
 # Echoes one of: true / false / no_app / no_sig
 wechat_get_task_allow_state() {
-  local app_bin="/Applications/WeChat.app/Contents/MacOS/WeChat"
+  local app_bin="${PREFERRED_WECHAT_TARGET}/Contents/MacOS/WeChat"
   if [[ ! -x "${app_bin}" ]]; then
     echo "no_app"
     return
@@ -261,7 +263,7 @@ warn_if_wechat_lacks_get_task_allow() {
       echo ""
       printf '%s' "${C_GREEN}"
       cat <<'CMD'
-  WX_BIN=/Applications/WeChat.app/Contents/MacOS/WeChat
+  WX_BIN="${PREFERRED_WECHAT_TARGET}/Contents/MacOS/WeChat"
   WX_ENT=/tmp/wechat-merged-entitlements.plist
   codesign -d --entitlements :- "$WX_BIN" > "$WX_ENT"
   /usr/libexec/PlistBuddy -c "Add :com.apple.security.get-task-allow bool true" "$WX_ENT" \
@@ -328,143 +330,129 @@ maybe_smoke_send() {
 }
 
 wechat_app_version() {
-  local app_path="$1"
-  local plist="${app_path}/Contents/Info.plist"
-  [[ -f "${plist}" ]] || return 1
-  /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "${plist}" 2>/dev/null
+  /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$1/Contents/Info.plist" 2>/dev/null
 }
 
 wechat_app_bundle_id() {
-  local app_path="$1"
-  local plist="${app_path}/Contents/Info.plist"
-  [[ -f "${plist}" ]] || return 1
-  /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "${plist}" 2>/dev/null
+  /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$1/Contents/Info.plist" 2>/dev/null
+}
+
+wechat_app_build() {
+  /usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$1/Contents/Info.plist" 2>/dev/null
+}
+
+supported_419_source() {
+  local app="$1" build
+  [[ "$(wechat_app_version "$app" || true)" == "4.1.9" ]] || return 1
+  build=$(wechat_app_build "$app" || true)
+  [[ "$build" == "268596" || "$build" == "268602" ]]
 }
 
 find_preferred_wechat_source() {
-  local candidate version root
-  if [[ -n "${PREFERRED_WECHAT_SOURCE}" ]]; then
-    version=$(wechat_app_version "${PREFERRED_WECHAT_SOURCE}" 2>/dev/null || true)
-    if [[ "${version}" == "${PREFERRED_WECHAT_VERSION}" ]]; then
-      printf '%s\n' "${PREFERRED_WECHAT_SOURCE}"
-      return 0
-    fi
-    warn "WECHAT_419_SOURCE 不是 WeChat ${PREFERRED_WECHAT_VERSION}: ${PREFERRED_WECHAT_SOURCE}"
-    return 1
+  local candidate
+  if [[ -n "$PREFERRED_WECHAT_SOURCE" ]]; then
+    supported_419_source "$PREFERRED_WECHAT_SOURCE" || {
+      err "指定的源 app 不是支持的微信 4.1.9：$PREFERRED_WECHAT_SOURCE"
+      return 1
+    }
+    printf '%s\n' "$PREFERRED_WECHAT_SOURCE"
+    return 0
   fi
-
-  for candidate in \
-    "/Applications/WeChat-4.1.9.app" \
-    "${HOME}/Applications/WeChat-4.1.9.app"; do
-    [[ "${candidate}" == "${PREFERRED_WECHAT_TARGET}" ]] && continue
-    version=$(wechat_app_version "${candidate}" 2>/dev/null || true)
-    if [[ "${version}" == "${PREFERRED_WECHAT_VERSION}" ]]; then
-      printf '%s\n' "${candidate}"
+  for candidate in /Applications/WeChat-4.1.9.app "$HOME/Applications/WeChat-4.1.9.app" /Applications/WeChat.app; do
+    if supported_419_source "$candidate"; then
+      printf '%s\n' "$candidate"
       return 0
     fi
-  done
-
-  for root in /Applications "${HOME}/Applications"; do
-    [[ -d "${root}" ]] || continue
-    while IFS= read -r -d '' candidate; do
-      [[ "${candidate}" == "${PREFERRED_WECHAT_TARGET}" ]] && continue
-      version=$(wechat_app_version "${candidate}" 2>/dev/null || true)
-      if [[ "${version}" == "${PREFERRED_WECHAT_VERSION}" ]]; then
-        printf '%s\n' "${candidate}"
-        return 0
-      fi
-    done < <(find "${root}" -maxdepth 1 -type d -name '*.app' -print0 2>/dev/null)
   done
   return 1
 }
 
-install_preferred_wechat_clone() {
-  local source="$1"
-  local target_parent
-  target_parent=$(dirname "${PREFERRED_WECHAT_TARGET}")
-  local clone_cmd=(
-    "${INSTALL_DIR}/wechat"
-    clone install
-    --source "${source}"
-    --target "${PREFERRED_WECHAT_TARGET}"
-    --name "${PREFERRED_WECHAT_NAME}"
-    --bundle-id "${PREFERRED_WECHAT_BUNDLE_ID}"
-  )
+choose_preferred_wechat_419() {
+  printf '\n微信 4.1.9 独立副本\n'
+  printf '  wechat-use 专注兼容微信 4.1.9，功能支持最全、使用体验最好。\n'
+  printf '  同意后自动安装独立副本，工具默认使用它；主微信程序和聊天数据保持原样。\n'
+  printf '  副本需要单独登录，自动更新会关闭，以保持 4.1.9。\n\n'
+  local choice="${WECHAT_USE_PREFER_419:-ask}"
+  if [[ "$choice" == ask ]]; then
+    if { exec 3<>/dev/tty; } 2>/dev/null; then
+      printf '[install] 安装并使用微信 4.1.9 独立副本？[Y/n] ' >&3
+      IFS= read -r choice <&3 || choice=skip
+      exec 3>&-
+      [[ -n "$choice" ]] || choice=yes
+    else
+      err '非交互安装请设置 WECHAT_USE_PREFER_419=yes；未获得选择，安装未开始。'
+      return 2
+    fi
+  fi
+  case "$choice" in
+    y|Y|yes|YES|Yes|1|true|TRUE|是|要) return 0 ;;
+    n|N|no|NO|No|0|false|FALSE|否|不要|skip)
+      info '已取消安装。主微信保持原样。'
+      return 2 ;;
+    *) err "无法识别选择：$choice"; return 2 ;;
+  esac
+}
 
-  if [[ -w "${target_parent}" ]]; then
-    "${clone_cmd[@]}"
-    return
+cleanup_install_stage() {
+  if [[ -n "${WECHAT_419_MOUNT:-}" ]]; then
+    hdiutil detach "$WECHAT_419_MOUNT" -quiet 2>/dev/null || true
   fi
-  if command -v sudo >/dev/null 2>&1; then
-    info "创建 ${PREFERRED_WECHAT_TARGET} 需要管理员权限…"
-    sudo "${clone_cmd[@]}"
-    return
+  if [[ -n "${STAGE:-}" && -d "$STAGE" ]]; then
+    rm -rf -- "$STAGE"
   fi
-  err "${target_parent} 不可写，且找不到 sudo"
-  return 1
+}
+
+download_preferred_wechat_source() {
+  local dmg="$STAGE/WeChatMac_4.1.9.dmg" actual
+  info '从微信官方下载 4.1.9（约 466 MB）…' >&2
+  curl --fail --location --show-error --retry 2 --connect-timeout 20 --max-time 900 \
+    --proto '=https' --proto-redir '=https' \
+    "$WECHAT_419_DMG_URL" -o "$dmg" || return 1
+  actual=$(shasum -a 256 "$dmg" | awk '{print $1}')
+  [[ "$actual" == "$WECHAT_419_DMG_SHA256" ]] || {
+    err '4.1.9 安装包校验不符，已停止安装。请更新安装命令后重试。'
+    return 1
+  }
+  WECHAT_419_MOUNT="$STAGE/wechat-419-dmg"
+  hdiutil attach -readonly -nobrowse -quiet -mountpoint "$WECHAT_419_MOUNT" "$dmg" || return 1
+  PREFERRED_WECHAT_SOURCE="$WECHAT_419_MOUNT/WeChat.app"
+  supported_419_source "$PREFERRED_WECHAT_SOURCE" || return 1
+  codesign --verify --deep --strict "$PREFERRED_WECHAT_SOURCE" || return 1
+  local signature
+  signature=$(codesign -dvv "$PREFERRED_WECHAT_SOURCE" 2>&1) || return 1
+  [[ "$signature" == *"TeamIdentifier=5A4RE8SF68"* ]] || {
+    err '安装包不是预期的腾讯签名，已停止安装。'
+    return 1
+  }
 }
 
 maybe_offer_preferred_wechat_419() {
-  echo ""
-  printf '%s推荐 WeChat %s%s\n' "${C_BOLD}" "${PREFERRED_WECHAT_VERSION}" "${C_RESET}"
-  printf '  WeChat 4.1.9 是 wechat-use 当前功能覆盖最完整、使用体验最好的版本。\n'
-  printf '  选择后会创建独立副本，不会覆盖 /Applications/WeChat.app，也不会改动源 app。\n\n'
-
-  if [[ -e "${PREFERRED_WECHAT_TARGET}" ]]; then
-    local existing_version existing_bundle_id
-    existing_version=$(wechat_app_version "${PREFERRED_WECHAT_TARGET}" 2>/dev/null || true)
-    existing_bundle_id=$(wechat_app_bundle_id "${PREFERRED_WECHAT_TARGET}" 2>/dev/null || true)
-    if [[ "${existing_version}" == "${PREFERRED_WECHAT_VERSION}" \
-      && "${existing_bundle_id}" == "${PREFERRED_WECHAT_BUNDLE_ID}" ]]; then
-      success "独立的 WeChat ${PREFERRED_WECHAT_VERSION} 副本已存在：${PREFERRED_WECHAT_TARGET}"
-    else
-      warn "目标路径已存在，为防止覆盖已跳过：${PREFERRED_WECHAT_TARGET}"
+  # User consent was collected before any installation or service changes.
+  if [[ -e "$PREFERRED_WECHAT_TARGET" || -L "$PREFERRED_WECHAT_TARGET" ]]; then
+    supported_419_source "$PREFERRED_WECHAT_TARGET" &&
+      [[ "$(wechat_app_bundle_id "$PREFERRED_WECHAT_TARGET" || true)" == "$PREFERRED_WECHAT_BUNDLE_ID" ]] || {
+        err "目标路径已被其他 app 占用，请保留或移走它后重试：$PREFERRED_WECHAT_TARGET"
+        return 1
+      }
+    "$INSTALL_DIR/wechat" clone use "$PREFERRED_WECHAT_TARGET" || return 1
+  else
+    if ! PREFERRED_WECHAT_SOURCE=$(find_preferred_wechat_source); then
+      [[ -z "${WECHAT_419_SOURCE:-}" ]] || return 1
+      download_preferred_wechat_source || return 1
     fi
-    return 0
+    info "从 $PREFERRED_WECHAT_SOURCE 创建独立副本…"
+    "$INSTALL_DIR/wechat" clone install \
+      --source "$PREFERRED_WECHAT_SOURCE" --target "$PREFERRED_WECHAT_TARGET" \
+      --name "$PREFERRED_WECHAT_NAME" --bundle-id "$PREFERRED_WECHAT_BUNDLE_ID" \
+      --make-default || return 1
   fi
-
-  local source
-  if ! source=$(find_preferred_wechat_source); then
-    info "未找到本地 WeChat ${PREFERRED_WECHAT_VERSION} app，保留你现在的 WeChat，跳过副本创建。"
-    printf '  %s如果你有 4.1.9 app，可以稍后运行：%s\n' "${C_DIM}" "${C_RESET}"
-    printf '  %sWECHAT_419_SOURCE=/path/to/WeChat-4.1.9.app WECHAT_USE_PREFER_419=yes ./install.sh%s\n' "${C_CYAN}" "${C_RESET}"
-    return 0
-  fi
-
-  info "已找到本地 4.1.9：${source}"
-  printf '  将创建：%s\n' "${PREFERRED_WECHAT_TARGET}"
-
-  local choice="${WECHAT_USE_PREFER_419:-ask}"
-  if [[ "${choice}" == "ask" ]]; then
-    if [[ ( -t 0 || -t 1 || -t 2 ) && -r /dev/tty && -w /dev/tty ]]; then
-      printf '%s[install] 要使用 WeChat 4.1.9 吗？[Y/n] %s' "${C_YELLOW}" "${C_RESET}" >/dev/tty
-      IFS= read -r choice </dev/tty || choice="skip"
-      [[ -z "${choice}" ]] && choice="yes"
-    else
-      info "(非交互模式，跳过 4.1.9 副本创建。设 WECHAT_USE_PREFER_419=yes 可自动选择)"
-      choice="skip"
-    fi
-  fi
-
-  case "${choice}" in
-    y|Y|yes|YES|Yes|1|true|TRUE|"是"|"要")
-      info "正在从 ${source} 创建独立副本…"
-      if install_preferred_wechat_clone "${source}"; then
-        success "WeChat ${PREFERRED_WECHAT_VERSION} 独立副本已创建：${PREFERRED_WECHAT_TARGET}"
-        printf '  %s它使用独立 bundle id：%s%s\n' "${C_DIM}" "${PREFERRED_WECHAT_BUNDLE_ID}" "${C_RESET}"
-        printf '  %s针对该副本运行：wechat-use --bundle-id %s doctor%s\n' "${C_DIM}" "${PREFERRED_WECHAT_BUNDLE_ID}" "${C_RESET}"
-      else
-        warn "4.1.9 副本创建失败，CLI 已正常安装，当前 WeChat 没有被改动。"
-        warn "手动重试：${INSTALL_DIR}/wechat clone install --source '${source}' --target '${PREFERRED_WECHAT_TARGET}' --name '${PREFERRED_WECHAT_NAME}' --bundle-id '${PREFERRED_WECHAT_BUNDLE_ID}'"
-      fi
-      ;;
-    n|N|no|NO|No|0|false|FALSE|"否"|"不要"|skip)
-      info "已跳过 4.1.9 副本创建，当前 WeChat 保持不变。"
-      ;;
-    *)
-      warn "无法识别选择 '${choice}'，为防止意外改动，已跳过 4.1.9 副本创建。"
-      ;;
-  esac
+  "$INSTALL_DIR/wechat" update-guard disable || return 1
+  defaults write "$PREFERRED_WECHAT_BUNDLE_ID" SUEnableAutomaticChecks -bool false
+  defaults write "$PREFERRED_WECHAT_BUNDLE_ID" SUAutomaticallyUpdate -bool false
+  export WECHAT_TARGET_BUNDLE_ID="$PREFERRED_WECHAT_BUNDLE_ID"
+  unset WECHAT_TARGET_PID WECHAT_TARGET_WXID
+  success "工具已默认使用微信 4.1.9 独立副本：$PREFERRED_WECHAT_TARGET"
+  info '打开该副本并扫码登录，然后运行 wechat-use init。主微信无需退出。'
 }
 
 # Test harnesses source this file to exercise the 4.1.9 decision flow without
@@ -482,9 +470,10 @@ if [[ "$(uname -m)" != "arm64" ]]; then
   exit 1
 fi
 
+choose_preferred_wechat_419 || exit $?
 mkdir -p "${INSTALL_DIR}" 2>/dev/null || true
 STAGE=$(mktemp -d)
-trap 'rm -rf "${STAGE}"' EXIT
+trap cleanup_install_stage EXIT
 
 # Resolve the latest release tag so we can fetch a versioned tarball +
 # SHA256SUMS. Using /releases/latest/download/<file> would save one API
@@ -797,7 +786,8 @@ for pat in \
   fi
 done
 sleep 2
-# SIGKILL 兜底任何挺过 SIGTERM 的进程
+# Give debugger-owning daemons time to detach cleanly. Never SIGKILL them
+# during migration: their attached WeChat process could be left suspended.
 for pat in \
   "${INSTALL_DIR}/wechatd" \
   "${INSTALL_DIR}/wechat-bridge" \
@@ -806,7 +796,16 @@ for pat in \
   "${INSTALL_DIR}/wechat listen"; do
   PIDS=$(pgrep -f "${pat}" 2>/dev/null || true)
   if [[ -n "${PIDS}" ]]; then
-    echo "${PIDS}" | xargs kill -9 2>/dev/null || true
+    for stopped_pid in $PIDS; do
+      for _ in {1..15}; do
+        kill -0 "$stopped_pid" 2>/dev/null || break
+        sleep 1
+      done
+      if kill -0 "$stopped_pid" 2>/dev/null; then
+        err "旧服务仍在退出（pid=$stopped_pid），请稍后重试安装。"
+        exit 1
+      fi
+    done
   fi
 done
 sleep 1
@@ -933,7 +932,7 @@ remediate_tcc_grant() {
     echo ""
     warn "Accessibility TCC 未授权 —— 直接进交互修复"
     echo ""
-    exec "${INSTALL_DIR}/wechat" doctor --fix-tcc
+    "${INSTALL_DIR}/wechat" doctor --fix-tcc || true
   elif gui_available && prompt_tcc_grant_via_dialog; then
     success "Accessibility TCC: 已授权 ✓ (dialog flow)"
     warn_if_wechat_lacks_get_task_allow || true
@@ -1064,11 +1063,11 @@ fi
 # "do they match" headline.
 DETECTED_WECHAT_VERSION=""
 DETECTED_WECHAT_BUILD=""
-if [[ -f /Applications/WeChat.app/Contents/Info.plist ]]; then
+if [[ -f "${PREFERRED_WECHAT_TARGET}/Contents/Info.plist" ]]; then
   DETECTED_WECHAT_VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \
-    /Applications/WeChat.app/Contents/Info.plist 2>/dev/null || echo "")
+    "${PREFERRED_WECHAT_TARGET}/Contents/Info.plist" 2>/dev/null || echo "")
   DETECTED_WECHAT_BUILD=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' \
-    /Applications/WeChat.app/Contents/Info.plist 2>/dev/null || echo "")
+    "${PREFERRED_WECHAT_TARGET}/Contents/Info.plist" 2>/dev/null || echo "")
 fi
 WECHAT_DETECTED_LINE=""
 if [[ -n "${DETECTED_WECHAT_VERSION}" ]]; then

@@ -1,13 +1,13 @@
 ---
 name: wechat-use
-description: "macOS WeChat CLI + local HTTP bridge + Wechaty Puppet gRPC gateway — send messages, query sessions / contacts / chat history / images / favorites, and expose stable HTTP / gRPC surfaces for agent integration. Use when the user asks to 'send a WeChat message', '发微信', query WeChat contacts/groups/messages, look up who said what in a chat, fetch images from history, export chat history, wire WeChat into Hermes / n8n / Dify / LangChain, or run any wechaty bot on a real macOS WeChat account. Requires WeChat 4.1.8 / 4.1.9 on macOS (Apple Silicon) and a `wechatuse_` activation code. One-time `wechat-use init` extracts the DB key; no sudo, no re-signing WeChat.app. Optional remote bridge — `wechat-use tunnel setup --hostname <yours>` exposes the local REST API via Cloudflare Tunnel for remote services to call."
+description: "macOS WeChat CLI + local HTTP bridge + Wechaty Puppet gRPC gateway — send messages, query sessions / contacts / chat history / images / favorites, and expose stable HTTP / gRPC surfaces for agent integration. Use when the user asks to 'send a WeChat message', '发微信', query WeChat contacts/groups/messages, look up who said what in a chat, fetch images from history, export chat history, wire WeChat into Hermes / n8n / Dify / LangChain, or run any wechaty bot on a real macOS WeChat account. Uses the installer-managed, isolated WeChat 4.1.9 clone on macOS (Apple Silicon) and a `wechatuse_` activation code. One-time `wechat-use init` extracts the DB key; no sudo, no re-signing WeChat.app. Optional remote bridge — `wechat-use tunnel setup --hostname YOUR_HOSTNAME` exposes the local REST API via Cloudflare Tunnel for remote services to call."
 metadata:
   author: leeguooooo
-  version: "1.12.1"
+  version: "1.18.0"
   platform: macOS-arm64
   requires:
     - macOS >= 14 (Apple Silicon)
-    - macOS 上的 WeChat 4.0.x / 4.1.x 系列 running (具体支持矩阵以 `wechat-use doctor` 输出为准)
+    - 独立微信 4.1.9 已启动并登录；由 install.sh 安装和默认绑定
     - Xcode Command Line Tools (含 macOS 公开调试接口)
     - Accessibility permission for `wechat-bridge` (macOS Sonoma+, only for `send`; Terminal itself does NOT need it)
     - Activation code (wechatuse_…) from @WechatCliBot — subscribe the official Telegram channel first
@@ -16,6 +16,12 @@ metadata:
 # wechat — macOS CLI
 
 Unified CLI for WeChat on macOS. Send messages in pure background (zero UI flash) AND query the encrypted local databases for sessions, contacts, chat history, group members, Moments, favorites.
+
+## Managed WeChat 4.1.9 (v1.18.0+)
+
+The installer asks for confirmation, then copies a supported local 4.1.9 or downloads a pinned Tencent DMG. It installs `~/Applications/WeChat-4.1.9-wechat-use.app` with its own bundle ID and sandbox container, disables that clone's updates, and saves `~/.wx-rs/managed-wechat.json`.
+
+All CLI, daemon, HTTP bridge, and MCP operations default to that clone. Open the clone and let the user log in, then run `wechat-use init`. Do not substitute `open -a WeChat`, sign the primary `/Applications/WeChat.app`, remove the managed selection, or fall back to the primary when the clone is closed. Only 4.1.9 receives ongoing compatibility work. When repairing installation, rerun the installer; do not download the latest WeChat.
 
 ## Fast path (read this first)
 
@@ -243,14 +249,14 @@ export PATH="$HOME/.local/bin:$PATH"
 wechat-use init
 ```
 
-This **restarts WeChat** (closes current session + relaunches) in order to capture the decryption key at login. Tell the user:
+Initialization targets only the managed 4.1.9 clone. Open that clone and ask the user to log in before running init. If a restart is required, it applies only to that clone. Tell the user:
 > "Going to briefly close and relaunch WeChat to extract the local database key. Any draft messages in WeChat will be lost — confirm before proceeding. **After WeChat relaunches, you must click 「进入 WeChat」 (or scan QR if no cached account) within ~5 minutes** — the key is only written during that sign-in."
 
 Key material is only written during the login moment, so `init` uses the macOS local debugging interface once during that window and waits up to 300 s. If the user misses the window or WeChat was already logged in before `init` ran, capture won't trigger — rerun `wechat-use init --force`.
 
 Result is saved to `~/.wx-rs/` (mode 0600 files) + `~/.wx-rs/config.json`. Re-run `init` whenever WeChat restarts.
 
-`init` also prints the detected WeChat version/build and a binary fingerprint check. If the fingerprint isn't in the verified set (e.g. a WeChat hot-fix shipped a new build), send/query may silently fail — reinstall the official dmg from https://mac.weixin.qq.com/en and verify the auto-update toggle at WeChat → 设置 → 通用 → 「有更新时自动升级」 is off.
+`init` also prints the detected WeChat version/build and a binary fingerprint check. If the fingerprint isn't in the verified set (e.g. a WeChat hot-fix shipped a new build), send/query may silently fail — repair the managed 4.1.9 clone using the installer and verify the auto-update toggle at WeChat → 设置 → 通用 → 「有更新时自动升级」 is off.
 
 **Step 3 — (For `send` only) Accessibility permission**:
 
@@ -283,12 +289,12 @@ When `wechat-use send` returns `{ok: false, …}` or stderr matches the `reason:
 | `reason:` slot | Root cause | Agent action |
 |---|---|---|
 | `delivery_verify_timeout` / `slot_send_bp_armed_no_fire` | WeChat (re)launched but its internal send pipeline not yet wired | Tell user: open WeChat → click 「文件传输助手」→ type any message → press Enter. Then retry `wechat-use send`. (See Step 4 above.) |
-| `wechat_not_running` | WeChat.app not launched | Run `open -a WeChat`. If from a non-aqua SSH session, fall back to `osascript -e 'tell application "WeChat" to activate'`. Wait ~5s before retrying. |
+| `wechat_not_running` | WeChat.app not launched | Open `~/Applications/WeChat-4.1.9-wechat-use.app`, then retry after the user logs in. Never launch the primary app as a fallback. |
 | `slot_send_bp_failed_to_arm` (detail: `send adapter install did not complete within 30s`) | WeChat has `get-task-allow=false` (official default signing); wechatd's local debugging interface can't connect | Run `wechat-use doctor` to confirm `wechat_get_task_allow ✗`. Then ask the user to copy-run the **merge-mode re-sign block** that `install.sh` prints (or `wechat-use doctor` suggests). Needs sudo, must be run by the user. Do NOT use a replace-mode `codesign --entitlements ...` command — it strips WeChat's existing system entitlements and breaks TCC for WeChat itself. |
 | `daemon_accessibility FAIL` / `ax_trusted=false` after a recent install/upgrade | Multiple `ai.wechat.*` LaunchAgents on the machine — orchestrate (KeepAlive) re-spawned wechatd with a stale launchd responsibility chain | Re-run `curl -fsSL https://raw.githubusercontent.com/leeguooooo/wechat-use/main/install.sh \| bash`. v1.16.12+ install.sh bootouts every `ai.wechat.*.plist` and bootstraps in the right order. Don't try to surgically `launchctl kickstart` — it doesn't reset the responsibility chain. |
 | `tcc_accessibility_denied` (wechat-bridge or wechatd untrusted) | User hasn't dragged binaries into System Settings → Privacy & Security → 辅助功能, or dragged them but didn't toggle ON | Open the pane: `open "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"` + `open ~/.local/bin`. Tell user to drag both `wechatd` and `wechat-bridge` in **and** toggle both to ON. macOS strictly requires user-initiated drag — no automation can substitute. |
 | `activation_*` / `subscription_*` / `unauthorized` | Activation code expired / not redeemed | `wechat-use auth status` to confirm. Then `wechat-use auth activate <code>`. Direct user to https://t.me/WechatCliBot to request an activation code (research / personal use only — no commercial inquiries answered). |
-| `dylib_fingerprint_unverified` | WeChat auto-updated to a build not in our verified set | `wechat-use doctor` shows the new fingerprint. Tell user to turn off WeChat auto-update (WeChat → 设置 → 通用 → 「有更新时自动升级」) and reinstall from https://mac.weixin.qq.com/en. New build support is a maintainer task — file an issue with the fingerprint reported by `wechat-use doctor`. |
+| `dylib_fingerprint_unverified` | WeChat auto-updated to a build not in our verified set | `wechat-use doctor` shows the new fingerprint. Tell user to turn off WeChat auto-update (WeChat → 设置 → 通用 → 「有更新时自动升级」) and repair the managed 4.1.9 clone with the installer. Do not upgrade to another WeChat version. |
 
 **Key principle**: every `reason:` slot is stable enum; the support payload includes `ax_trusted`, `input_monitoring`, `binary_fingerprint`, `cli_version`, `daemon_version` — match on those exact field names, not on the human-readable Chinese error message (it may evolve across releases).
 
@@ -701,7 +707,7 @@ Example user utterances and the right first call:
 
 ## Caveats
 
-- **macOS arm64 only**. WeChat 4.0.x / 4.1.x 系列 verified — run `wechat-use doctor` to confirm your specific build is in the adaptation set. Other versions may need adaptation work.
+- **macOS arm64 only**. Only the independent WeChat 4.1.9 clone receives ongoing support — run `wechat-use doctor` to confirm your specific build is in the adaptation set. Other versions may need adaptation work.
 - Binary is a standalone native executable (GitHub Releases). `install.sh` auto-clears macOS Gatekeeper quarantine attribute.
 - **Not a WeChat API**. Userland research artifact. Can break on any WeChat update.
 - **LICENSE forbids commercial use** — see [LICENSE](LICENSE) + [DISCLAIMER.md](DISCLAIMER.md).

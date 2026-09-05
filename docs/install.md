@@ -9,7 +9,7 @@
 - macOS Apple Silicon
 - 已关注频道 <https://t.me/wechatuse>（未关注 bot 拦截审核）
 - 交流群（可选）：<https://t.me/Wechatuse_talk> — 用法交流 / 求助 / 反馈
-- 已有 WeChat 4.0.1.52 / 4.1.8 / 4.1.9 任一版本
+- 不需要预装旧版微信；安装器会准备独立的 WeChat 4.1.9
 - 终端有 `~/.local/bin` 在 `PATH`
 
 ---
@@ -37,13 +37,15 @@ curl -fsSL https://raw.githubusercontent.com/leeguooooo/wechat-use/main/install.
 
 `install.sh` 干的事：
 
-1. 下载 binary 到 `~/.local/bin/`：`wechat` / `wechat-bridge` / `wechatd` / `wechat-wechaty-gateway` / `wechat-inspect-msg`
-2. 给 binary 加可执行位 + ad-hoc codesign（macOS Gatekeeper 必需）
-3. 找到本地 WeChat 4.1.9 时，提示是否创建独立副本；选择后不会覆盖当前微信或源 app
+1. 询问是否安装独立的微信 4.1.9，然后下载 CLI 到 `~/.local/bin/`
+2. 优先复制本地支持的 4.1.9；没有时从腾讯官方下载固定安装包，验证 SHA-256 和签名
+3. 创建 `~/Applications/WeChat-4.1.9-wechat-use.app`，独立 bundle id 和沙盒目录，默认绑定工具并关闭副本更新
 4. 注册 `ai.wechat.bridge` LaunchAgent（开机自启 wechat-bridge）
 5. 启动 LaunchAgent 跑 `/health` 探活
 
-自动化安装可以显式选择：`WECHAT_USE_PREFER_419=yes` 创建副本，`WECHAT_USE_PREFER_419=no` 跳过。本地 4.1.9 不在默认路径时，再传 `WECHAT_419_SOURCE=/path/to/WeChat-4.1.9.app`。
+自动化安装用 `curl -fsSL https://raw.githubusercontent.com/leeguooooo/wechat-use/main/install.sh | WECHAT_USE_PREFER_419=yes bash`。设为 `no` 会取消安装。已有本地 4.1.9 时，可传 `WECHAT_419_SOURCE=/path/to/WeChat-4.1.9.app`。
+
+打开新副本扫码登录，再运行 `wechat-use init`。以后直接运行工具即可，CLI 和后台服务都会使用该副本。副本未启动时会提示打开，不会改用主微信。设置保存在 `~/.wx-rs/managed-wechat.json`，旧账号配置保持原样。
 
 确认 PATH：
 
