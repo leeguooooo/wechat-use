@@ -38,6 +38,9 @@ chmod +x "$INSTALL_DIR/wechat" "$TEST_ROOT/fake-bin/defaults"
 export PATH="$TEST_ROOT/fake-bin:$PATH"
 # shellcheck disable=SC1091
 source "$(cd "$(dirname "$0")/.." && pwd)/install.sh"
+# Signing behavior is exercised with the real vendor bundle in live QA.
+# These lifecycle fixtures intentionally have no native helper executable.
+usable_419_source() { supported_419_source "$1"; }
 export WECHAT_USE_PREFER_419=yes
 choose_preferred_wechat_419 >/dev/null
 maybe_offer_preferred_wechat_419 >/dev/null
@@ -62,3 +65,18 @@ download_preferred_wechat_source() { downloaded=1; PREFERRED_WECHAT_SOURCE="$TES
 maybe_offer_preferred_wechat_419 >/dev/null
 [[ "$downloaded" == 1 ]]
 echo 'PASS: local source, fresh download, default binding, update scope, refusal, reuse, occupied target'
+
+# The real finalization boundary must return a useful failure before replacing
+# installed tools, even when a staged CLI/download fails under set -e.
+STAGE="$TEST_ROOT/stage"
+mkdir -p "$STAGE"
+printf '#!/bin/sh\nexit 17\n' > "$STAGE/wechat"
+chmod +x "$STAGE/wechat"
+installed_before=$(shasum "$INSTALL_DIR/wechat")
+if prepare_preferred_wechat_419 > "$TEST_ROOT/failure.log" 2>&1; then
+  echo 'FAIL: failed staged clone reported success'; exit 1
+fi
+[[ "$installed_before" == "$(shasum "$INSTALL_DIR/wechat")" ]]
+grep -F '安装未完成' "$TEST_ROOT/failure.log" >/dev/null
+grep -F '重跑同一安装命令' "$TEST_ROOT/failure.log" >/dev/null
+echo 'PASS: staged failure preserves installed CLI and prints recovery instructions'

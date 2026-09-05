@@ -6,7 +6,7 @@
 set -euo pipefail
 
 REPO="leeguooooo/wechat-use"
-BINS=(wechat wechatd wechat-bridge wechat-wechaty-gateway)
+BINS=(wechat wechatd wechat-bridge wechat-mcp wechat-wechaty-gateway)
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 
 # Supported WeChat versions (高层版本号). Per-build 兼容矩阵在运行时通过
@@ -348,18 +348,26 @@ supported_419_source() {
   [[ "$build" == "268596" || "$build" == "268602" ]]
 }
 
+usable_419_source() {
+  supported_419_source "$1" || return 1
+  local inherit
+  inherit=$(codesign -d --entitlements :- "$1/Contents/MacOS/WeChatAppEx.app" 2>/dev/null \
+    | plutil -extract 'com\.apple\.security\.inherit' raw -o - - 2>/dev/null || true)
+  [[ "$inherit" == true ]]
+}
+
 find_preferred_wechat_source() {
   local candidate
   if [[ -n "$PREFERRED_WECHAT_SOURCE" ]]; then
-    supported_419_source "$PREFERRED_WECHAT_SOURCE" || {
-      err "指定的源 app 不是支持的微信 4.1.9：$PREFERRED_WECHAT_SOURCE"
+    usable_419_source "$PREFERRED_WECHAT_SOURCE" || {
+      err "指定源不是可用的微信 4.1.9，或子模块签名已被修改：$PREFERRED_WECHAT_SOURCE"
       return 1
     }
     printf '%s\n' "$PREFERRED_WECHAT_SOURCE"
     return 0
   fi
   for candidate in /Applications/WeChat-4.1.9.app "$HOME/Applications/WeChat-4.1.9.app" /Applications/WeChat.app; do
-    if supported_419_source "$candidate"; then
+    if usable_419_source "$candidate"; then
       printf '%s\n' "$candidate"
       return 0
     fi
@@ -416,7 +424,7 @@ download_preferred_wechat_source() {
   WECHAT_419_MOUNT="$STAGE/wechat-419-dmg"
   hdiutil attach -readonly -nobrowse -quiet -mountpoint "$WECHAT_419_MOUNT" "$dmg" || return 1
   PREFERRED_WECHAT_SOURCE="$WECHAT_419_MOUNT/WeChat.app"
-  supported_419_source "$PREFERRED_WECHAT_SOURCE" || return 1
+  usable_419_source "$PREFERRED_WECHAT_SOURCE" || return 1
   codesign --verify --deep --strict "$PREFERRED_WECHAT_SOURCE" || return 1
   local signature
   signature=$(codesign -dvv "$PREFERRED_WECHAT_SOURCE" 2>&1) || return 1
@@ -427,6 +435,7 @@ download_preferred_wechat_source() {
 }
 
 maybe_offer_preferred_wechat_419() {
+  local managed_cli="${MANAGED_SETUP_CLI:-$INSTALL_DIR/wechat}"
   # User consent was collected before any installation or service changes.
   if [[ -e "$PREFERRED_WECHAT_TARGET" || -L "$PREFERRED_WECHAT_TARGET" ]]; then
     supported_419_source "$PREFERRED_WECHAT_TARGET" &&
@@ -434,25 +443,36 @@ maybe_offer_preferred_wechat_419() {
         err "目标路径已被其他 app 占用，请保留或移走它后重试：$PREFERRED_WECHAT_TARGET"
         return 1
       }
-    "$INSTALL_DIR/wechat" clone use "$PREFERRED_WECHAT_TARGET" || return 1
+    "$managed_cli" clone use "$PREFERRED_WECHAT_TARGET" || return 1
   else
     if ! PREFERRED_WECHAT_SOURCE=$(find_preferred_wechat_source); then
       [[ -z "${WECHAT_419_SOURCE:-}" ]] || return 1
       download_preferred_wechat_source || return 1
     fi
     info "从 $PREFERRED_WECHAT_SOURCE 创建独立副本…"
-    "$INSTALL_DIR/wechat" clone install \
+    "$managed_cli" clone install \
       --source "$PREFERRED_WECHAT_SOURCE" --target "$PREFERRED_WECHAT_TARGET" \
       --name "$PREFERRED_WECHAT_NAME" --bundle-id "$PREFERRED_WECHAT_BUNDLE_ID" \
       --make-default || return 1
   fi
-  "$INSTALL_DIR/wechat" update-guard disable || return 1
+  "$managed_cli" update-guard disable || return 1
   defaults write "$PREFERRED_WECHAT_BUNDLE_ID" SUEnableAutomaticChecks -bool false
   defaults write "$PREFERRED_WECHAT_BUNDLE_ID" SUAutomaticallyUpdate -bool false
   export WECHAT_TARGET_BUNDLE_ID="$PREFERRED_WECHAT_BUNDLE_ID"
   unset WECHAT_TARGET_PID WECHAT_TARGET_WXID
   success "工具已默认使用微信 4.1.9 独立副本：$PREFERRED_WECHAT_TARGET"
   info '打开该副本并扫码登录，然后运行 wechat-use init。主微信无需退出。'
+}
+
+prepare_preferred_wechat_419() {
+  MANAGED_SETUP_CLI="$STAGE/wechat"
+  if ! maybe_offer_preferred_wechat_419; then
+    unset MANAGED_SETUP_CLI
+    err '独立微信准备失败，安装未完成；现有 CLI 和后台服务尚未替换。'
+    err '请按上方错误修复后重跑同一安装命令；网络下载失败可直接重试。'
+    return 1
+  fi
+  unset MANAGED_SETUP_CLI
 }
 
 # Test harnesses source this file to exercise the 4.1.9 decision flow without
@@ -526,6 +546,10 @@ info "校验 tarball SHA-256"
   fi
 )
 success "SHA-256 校验通过"
+
+# Prepare the required clone using verified staged binaries BEFORE replacing
+# any installed CLI or touching its LaunchAgents. Failures stay recoverable.
+prepare_preferred_wechat_419 || exit 1
 
 for BIN_NAME in "${BINS[@]}"; do
   SRC="${STAGE}/${BIN_NAME}"
@@ -663,11 +687,6 @@ fi
 success "已建立别名:${WECHAT_USE_LINK} → wechat（wechat-use 与 wechat 等价）"
 echo ""
 
-# This is the first optional product choice after the verified CLI binaries
-# land. It never replaces either the current WeChat.app or the discovered
-# 4.1.9 source bundle.
-maybe_offer_preferred_wechat_419
-
 # v1.16.4 REVERT: cleanup remnants of the v1.16.0–v1.16.3 .app bundle
 # approach. The install loop already replaced ~/.local/bin/{wechatd,
 # wechat-bridge} symlinks with regular files; here we (a) remove the
@@ -707,7 +726,7 @@ NEW_VERSION_TAG="${NEW_VERSION_TAG#v}"
 # subprocess via env, so command-v can falsely report "no shadow"
 # even when fish's `which wechat` returns an older binary.
 KNOWN_SHADOW_DIRS=("$HOME/.cargo/bin" "$HOME/bin")
-for BIN in wechat wechatd wechat-bridge wechat-wechaty-gateway; do
+for BIN in wechat wechatd wechat-bridge wechat-mcp wechat-wechaty-gateway; do
   EXPECTED="${INSTALL_DIR}/${BIN}"
   for SHADOW_DIR in "${KNOWN_SHADOW_DIRS[@]}"; do
     SHADOW="${SHADOW_DIR}/${BIN}"
