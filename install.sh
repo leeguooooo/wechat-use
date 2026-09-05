@@ -605,17 +605,31 @@ for BIN_NAME in "${BINS[@]}"; do
   # binaries (most fresh installs); `set -euo pipefail` would propagate the
   # pipeline failure into the assignment and abort the installer. Wrap in
   # `if cmd; then ...; else ...; fi` so the failure is consumed explicitly.
+  # `-dvvv` (vs `-dv`) also emits the `Authority=` chain to stderr so we can
+  # tell a Developer ID signature apart from an ad-hoc one.
   CS_PROBE=$(mktemp "${TMPDIR:-/tmp}/wechat-install-cs-probe.XXXXXX")
-  if codesign -dv "${INSTALL_DIR}/${BIN_NAME}" 2>"${CS_PROBE}"; then
+  if codesign -dvvv "${INSTALL_DIR}/${BIN_NAME}" 2>"${CS_PROBE}"; then
     EXISTING_IDENT=$(awk -F'=' '/^Identifier=/ { print $2 }' "${CS_PROBE}" | tr -d '\r')
   else
     EXISTING_IDENT=""
   fi
+  IS_DEVID=0
+  if grep -q 'Authority=Developer ID Application' "${CS_PROBE}" 2>/dev/null; then
+    IS_DEVID=1
+  fi
   rm -f "${CS_PROBE}"
 
-  if [[ "${EXISTING_IDENT}" == "${IDENTIFIER}" ]]; then
-    # Already signed by us with the same identifier — leave alone, TCC
-    # is presumably still in effect.
+  if [[ "${IS_DEVID}" == "1" ]]; then
+    # Release binaries are now Developer ID signed + notarized upstream. Re-
+    # signing with an ad-hoc identity would DESTROY that signature and bring
+    # back the per-upgrade CDHash churn that drops the Accessibility / Input
+    # Monitoring grant. The whole point of Developer ID is that macOS keys the
+    # TCC grant off the stable identity (team + identifier), so it survives
+    # upgrades. Leave it exactly as shipped — do NOT touch it.
+    info "${BIN_NAME} 已 Developer ID 签名（已公证），保留原签名 —— TCC 跨升级不用重勾"
+  elif [[ "${EXISTING_IDENT}" == "${IDENTIFIER}" ]]; then
+    # Already ad-hoc signed by us with the same identifier — leave alone, TCC
+    # is presumably still in effect. (Legacy path for pre-Developer-ID releases.)
     info "${BIN_NAME} 已 ad-hoc 签名 (${IDENTIFIER})，跳过 re-sign 保留 TCC 授权"
   else
     CODESIGN_ERR=$(mktemp "${TMPDIR:-/tmp}/wechat-install-codesign.XXXXXX")
