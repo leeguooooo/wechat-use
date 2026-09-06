@@ -5,49 +5,50 @@ Wechaty Puppet gRPC gateway 写 macOS 微信机器人。
 
 ## 前置
 
-1. **macOS Apple Silicon + WeChat 4.x**（4.0.1.52 / 4.1.8 已 calibrate，其他版本可能需要重抓 offset）
-2. **wechat-use ≥ v1.13 装好**（示例 04 需要 ≥ v1.11；建议直接用 latest）：
+1. **macOS Apple Silicon + 安装器管理的独立微信 4.1.9**
+2. **安装与示例配套的 wechat-use 网关**：
    ```bash
    curl -fsSL https://raw.githubusercontent.com/leeguooooo/wechat-use/main/install.sh | bash
    wechat-use auth activate <你的激活码>
-   wechat-use init        # 抽 SQLCipher key
-   wechat-use send "hi" filehelper   # 首次需要在 WeChat 里手动发一条 warmup InputView
+   wechat-use init
    ```
-3. **跑 gateway**（默认 127.0.0.1:18401，loopback 模式不需要 bearer）：
+3. **设置网关凭据并启动 gateway**（默认 127.0.0.1:18401）：
    ```bash
+   export WECHATY_GATEWAY_BEARER="$(openssl rand -hex 32)"
    wechat-wechaty-gateway
    ```
 
 > ⚠️ **激活码 gate**：每个 wechaty 数据 RPC 都校验 `wechatuse_` 激活码（不是 transport bearer）。
-> 本机 loopback 默认信任,不需要 transport bearer。要把 gateway 暴露公网才需要加 bearer + 反代/Tailscale,见 `docs/remote-gateway.md`。
+> 客户端与网关必须使用相同的 `WECHATY_GATEWAY_BEARER`。它与激活码用途不同。远程连接需要 TLS，见 [远程网关说明](../docs/remote-gateway.md)。
 
 ## 示例
 
 | 示例 | 说明 | 学到 |
 |---|---|---|
-| [`01-echo-bot`](./examples/01-echo-bot) | 收到任何消息就回 "你说: <X>" | wechaty 最小可跑形态 + login/message 事件 |
-| [`02-group-mention-only`](./examples/02-group-mention-only) | 只在群里被 @ 时才回，DM 全应答 | `isGroup` + `mentionSelf()` filter；不踩群刷屏雷 |
-| [`03-llm-bot`](./examples/03-llm-bot) | 接 OpenAI/Claude API，AI 答复 | 真实生产 bot 模式，rate-limit + 上下文记忆 |
-| [`04-cloudflare-worker-bot`](./examples/04-cloudflare-worker-bot) | **远程** CF Worker 用 JWT 调用你 Mac 上微信发消息（v1.11+） | Cloudflare Tunnel + REST 桥接入；`wrangler secret put` 管 token |
-| [`05-saas-orchestrate-template`](./examples/05-saas-orchestrate-template) | **v1.12 SaaS server 模板** —— CF Worker + D1，实现 4 个 orchestrate 协议端点 | 个人 fork 即起最小可用对接（claim/done/fail/inbound + HMAC + 幂等），自家业务在这上加 |
+| [`01-echo-bot`](./01-echo-bot) | 收到任何消息就回 "你说: <X>" | wechaty 最小可跑形态 + login/message 事件 |
+| [`02-group-mention-only`](./02-group-mention-only) | 只在群里被 @ 时才回，DM 全应答 | `isGroup` + `mentionSelf()` filter；不踩群刷屏雷 |
+| [`03-llm-bot`](./03-llm-bot) | 接 OpenAI/Claude API，AI 答复 | 真实生产 bot 模式，rate-limit + 上下文记忆 |
+| [`04-cloudflare-worker-bot`](./04-cloudflare-worker-bot) | **远程** CF Worker 用 JWT 调用你 Mac 上微信发消息（v1.11+） | Cloudflare Tunnel + REST 桥接入；`wrangler secret put` 管 token |
+| [`05-saas-orchestrate-template`](./05-saas-orchestrate-template) | **v1.12 SaaS server 模板** —— CF Worker + D1，实现 4 个 orchestrate 协议端点 | 个人 fork 即起最小可用对接（claim/done/fail/inbound + HMAC + 幂等），自家业务在这上加 |
 
-每个目录有独立 `README.md` + `package.json` + 一个可跑 `bot.js`。
+请保留完整仓库目录：Node 示例会安装仓库中的 `sdk/node` 客户端，并共用 `examples/lib` 配置。
 
 ## 跑示例
 
 ```bash
 cd examples/01-echo-bot
 npm install
-node bot.js                 # loopback 模式不需要 bearer
+node bot.js                 # 本终端须设置与网关相同的 WECHATY_GATEWAY_BEARER
 ```
 
-第一条 log 出现 `logged in as <你的wxid>` 就说明 gateway → daemon → WeChat
-全链路通了。
+`login` 事件表示网关提供了账号信息；实际收发仍需分别验证。先使用自己的测试会话验收。
 
-> 如果 gateway 启动时设了 `WECHATY_GATEWAY_BEARER=<x>`(对外暴露场景),客户端
-> 必须用同一串走 grpc metadata `Authorization: Bearer <x>`。这需要在 bot.js 里
-> 用底层 grpc-js client 而非 wechaty-puppet-service 默认管线 —— 见
-> `examples/04-cloudflare-worker-bot` 远程接入参考。
+示例使用保留标准 PuppetService API 的 `WechatUsePuppet`，修正上游 1.19.9 的定位读取。`token` 直接使用网关 bearer，不需要自行修改 grpc-js。
+本机无 TLS 模式使用 SDK 的 authority 凭据通道，网关仍校验 token。
+仅做本机开发且明确不要鉴权时，可在网关和示例中同时设置 `WECHATY_GATEWAY_DEV_INSECURE=1`。
+
+远程客户端还需设置 `WECHATY_GATEWAY_TLS=1`；自签 CA 可通过 `WECHATY_GATEWAY_TLS_CA_PEM` 提供。
+示例拒绝在非本机地址上明文传输 token。
 
 ## 常见问题
 
@@ -58,7 +59,7 @@ node bot.js                 # loopback 模式不需要 bearer
 **`Status::Unauthenticated: missing bearer token`**
 
 → 你 gateway 启动时设了 `WECHATY_GATEWAY_BEARER`，客户端要用同一个。
-Node 客户端的 `token` 字段不是这个 bearer，是 wechaty puppet token（任意非空字符串占位即可）。
+检查客户端的 `token` 是否与网关 bearer 完全一致，不要使用任意占位 token。
 
 **Login 5s 超时**
 

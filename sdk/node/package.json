@@ -1,0 +1,26 @@
+{
+  "name": "@wechat-use/client",
+  "version": "0.1.0",
+  "description": "Wechaty Puppet client for the wechat-use gateway",
+  "type": "module",
+  "main": "index.mjs",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.mjs"
+    }
+  },
+  "files": [
+    "index.mjs",
+    "README.html",
+    "index.d.ts"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "wechaty-puppet-service": "1.19.9"
+  },
+  "private": true,
+  "types": "index.d.ts"
+}

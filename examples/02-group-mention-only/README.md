@@ -6,7 +6,7 @@
 
 ```bash
 npm install
-WECHATY_BEARER=<gateway bearer> node bot.js
+WECHATY_GATEWAY_BEARER='same-token-as-gateway' node bot.js
 ```
 
 把 bot 拉进任意微信群，群里发 `@Bot 你好`，bot 回 "收到 @：你好"。
@@ -23,19 +23,5 @@ const mentioned = isGroup ? await msg.mentionSelf() : false
 if (isGroup && !mentioned) return  // 群里没 @ 我，闭嘴
 ```
 
-**两层 filter，纵深防御**：
-
-1. **客户端**（这里）：`msg.mentionSelf()` 已经准确识别（wechaty 会调
-   `MessagePayload.mentionIds.includes(self_wxid)`，daemon 那边在 v1.10.28+
-   填的是权威 mention 列表）
-2. **gateway 出口**（可选）：在 `wechat-bridge` 进程的 LaunchAgent plist 里设
-   `WECHAT_BRIDGE_GROUP_MENTION_ONLY=1`，让群里非 @ 的消息根本不流到客户端
-   → 即使你客户端 logic 漏了 filter，wxid 列表也不会泄漏给上层 bot
-
-生产建议**两层都开**：客户端 filter 是最后一道，bridge 出口 filter 减少传输量 +
-减少日志噪声。
-
-## 注意
-
-- `mentionSelf()` 在 DM 上恒返回 false（DM 没有 @ 概念），所以条件 `if (isGroup && !mentioned)` 是必须的
-- 群里收到 mention 但 `msg.text()` 不带 `@Bot ` 前缀也是正常的——wechaty 会自动 strip mention 前缀，让你拿到纯文本指令
+群 @ 过滤在本示例客户端执行，私聊也会跳过当前账号自己发的消息。
+HTTP/SSE 接入另外支持 `WECHAT_BRIDGE_GROUP_MENTION_ONLY=1`；Wechaty gRPC 示例使用上面的 `mentionSelf()` 判断。

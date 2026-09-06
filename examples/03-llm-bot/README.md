@@ -7,13 +7,14 @@
 
 ```bash
 npm install
+export WECHATY_GATEWAY_BEARER='same-token-as-gateway'
 export OPENAI_API_KEY=sk-...
 export OPENAI_MODEL=gpt-4o-mini       # 或 claude-3-5-sonnet 走 anthropic proxy
 # OPENAI_BASE_URL 可选；默认走 OpenAI
 node bot.js
 ```
 
-bot 起来之后给自己（filehelper）私发任意问题，应在 1-3s 内拿到 LLM 答复。
+bot 启动后，用另一个账号发送私聊问题进行验收。示例会跳过当前账号自己发送的消息，包括 filehelper；响应时间取决于模型与网络。
 
 ## 用 Claude / 本地 ollama
 

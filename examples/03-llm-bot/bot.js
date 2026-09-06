@@ -1,9 +1,9 @@
 // llm-bot: 接 OpenAI 兼容 LLM 端点，DM 全应答 + 群里 @ 应答，每会话 5 轮上下文。
 import { WechatyBuilder } from 'wechaty'
-import { PuppetService } from 'wechaty-puppet-service'
+import { WechatUsePuppet } from '@wechat-use/client'
+import { gatewayOptions } from '../lib/gateway-options.mjs'
 import OpenAI from 'openai'
 
-const ENDPOINT = process.env.WECHATY_GATEWAY_ENDPOINT || '127.0.0.1:18401'
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY
 const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL  // optional
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini'
@@ -15,19 +15,13 @@ if (!OPENAI_API_KEY) {
   process.exit(1)
 }
 
-process.env.WECHATY_PUPPET_SERVICE_NO_TLS_INSECURE_CLIENT = '1'
-process.env.WECHATY_PUPPET_SERVICE_NO_TLS_INSECURE_SERVER = '1'
 
 const llm = new OpenAI({
   apiKey: OPENAI_API_KEY,
   ...(OPENAI_BASE_URL ? { baseURL: OPENAI_BASE_URL } : {}),
 })
 
-const puppet = new PuppetService({
-  token: 'puppet_workpro_local',
-  endpoint: ENDPOINT,
-  tls: { disable: true, serverName: 'localhost' },
-})
+const puppet = new WechatUsePuppet(gatewayOptions())
 const wechaty = WechatyBuilder.build({ puppet })
 
 // per-conversation 5-round LRU + rate-limit
@@ -56,7 +50,7 @@ async function askLLM(history) {
 wechaty.on('login', user => console.log(`[bot] logged in as ${user.id}; model=${OPENAI_MODEL}`))
 wechaty.on('error', err => console.error('[bot] error:', err?.message ?? err))
 
-wechaty.on('message', async (msg) => {
+async function handleMessage(msg) {
   if (msg.self()) return
   if (msg.type() !== wechaty.Message.Type.Text) return
 
@@ -68,7 +62,8 @@ wechaty.on('message', async (msg) => {
   if (!text) return
 
   const talkerId = msg.talker()?.id ?? 'unknown'
-  const sessionId = isGroup ? `${msg.room().id}:${talkerId}` : talkerId
+  const conversationId = isGroup ? `${msg.room().id}:${talkerId}` : talkerId
+  const sessionId = `${wechaty.currentUser.id}:${conversationId}`
   const session = sessionFor(sessionId)
 
   // /reset clears history
@@ -90,20 +85,32 @@ wechaty.on('message', async (msg) => {
   // trim
   while (session.history.length > HISTORY_LIMIT) session.history.shift()
 
+  let reply
   try {
-    const reply = await askLLM(session.history)
-    session.history.push({ role: 'assistant', content: reply })
-    while (session.history.length > HISTORY_LIMIT) session.history.shift()
+    reply = await askLLM(session.history)
+  } catch (error) {
+    console.error('[bot] LLM request failed:', error?.message ?? error)
+    await msg.say('LLM 调用失败，稍后再试。')
+    return
+  }
+  try {
     // WeChat 4096 字符上限——长 reply 拆段
     const CHUNK = 1500
     for (let i = 0; i < reply.length; i += CHUNK) {
       await msg.say(reply.slice(i, i + CHUNK))
     }
-    console.log(`[bot] [${sessionId}] in=${text.length}ch out=${reply.length}ch`)
-  } catch (e) {
-    console.error('[bot] LLM error:', e?.message ?? e)
-    await msg.say('LLM 调用失败，稍后再试。')
+    session.history.push({ role: 'assistant', content: reply })
+    while (session.history.length > HISTORY_LIMIT) session.history.shift()
+    console.log(`[bot] reply completed: in=${text.length}ch out=${reply.length}ch`)
+  } catch (error) {
+    // A transport error can follow an accepted send. Stop the chunk loop;
+    // never send a second notification or automatically retry this reply.
+    console.error('[bot] delivery needs verification:', error?.message ?? error)
   }
+}
+
+wechaty.on('message', msg => {
+  handleMessage(msg).catch(error => console.error('[bot] message handling failed:', error?.message ?? error))
 })
 
 await wechaty.start()

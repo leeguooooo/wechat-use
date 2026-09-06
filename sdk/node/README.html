@@ -1,0 +1,10 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>wechat-use Node SDK</title><style>:root{--fg:#202724;--accent:#16754a;--border:#d9e0dc;--muted:#636c66}body{max-width:850px;margin:40px auto;padding:0 24px;color:var(--fg);font:16px/1.7 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}h1{font-size:27px}pre{white-space:pre-wrap;background:#f4f7f5;border:1px solid var(--border);padding:16px}a{color:var(--accent)}aside{color:var(--muted)}</style></head><body><header><h1>wechat-use Node SDK</h1><p>WechatUsePuppet 保留 Wechaty PuppetService API，修正 1.19.9 的定位反序列化。适用于 Node 18 及以上版本。</p></header><section><h2>源码安装</h2><p>配合本目录同一提交构建的 wechat-use gateway 使用。从仓库根目录安装：</p><pre>npm install ./sdk/node --install-links</pre><p>开发树中的目录位于 wx/sdk/node 时，将路径替换为 ./wx/sdk/node。发布包通过 GitHub Releases 分发，不发布到 npm registry。</p></section><section><h2>接入 Wechaty</h2><pre>import { WechatyBuilder } from 'wechaty'
+import { WechatUsePuppet } from '@wechat-use/client'
+
+const puppet = new WechatUsePuppet({
+  endpoint: '127.0.0.1:18401',
+  token: process.env.WECHATY_GATEWAY_BEARER,
+  tls: { disable: true, serverName: 'localhost' },
+})
+const bot = WechatyBuilder.build({ puppet })
+await bot.start()</pre><p>token 使用与网关相同的 bearer。无 TLS 仅用于本机；远程使用 TLS 及相应 CA 配置。激活码与网关 bearer 分开管理。</p></section><section><h2>定位兼容性</h2><p>上游 PuppetService 1.19.9 将 protobuf 对象直接展开，定位数值会保留默认的 0。此类使用同一已鉴权连接读取 protobuf getter，返回正确的 latitude、longitude、address、name、accuracy；消息不存在、无定位或传输失败时保留错误。</p><p>其余方法沿用 PuppetService。此兼容层固定依赖 1.19.9，升级依赖时须重新运行客户端契约测试。</p></section><aside>客户端测试使用合成后台验证 gRPC 与标准 Wechaty 调用链。真实微信收发及未完成的网关能力，仍需按项目能力清单验收。</aside></body></html>

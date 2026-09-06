@@ -1,20 +1,19 @@
 # 01-echo-bot
 
-最小可跑的 Wechaty 机器人：收到任何文字消息就回 "你说: <原文>"。
+最小可跑的 Wechaty 机器人：收到其他账号的私聊文字就回 "你说: <原文>"。
 
 ## 跑
 
 ```bash
 npm install
-WECHATY_BEARER=<gateway 启动时设的 bearer> node bot.js
+WECHATY_GATEWAY_BEARER='same-token-as-gateway' node bot.js
 ```
 
 期望输出：
 ```
-[bot] starting…
 [bot] logged in as wxid_xxx
-[bot] message: type=Text from=wxid_yyy text="你好"
-[bot] replied: 你说: 你好
+[bot] message: type=6 chars=2
+[bot] reply completed
 ```
 
 ## 代码
