@@ -90,9 +90,9 @@ curl -fsSL https://raw.githubusercontent.com/leeguooooo/wechat-use/main/install.
 # 1) 输入激活码
 wechat-use auth activate wechatuse_xxxxxx
 
-# 2) ⚠️ 授权 wechat-bridge 进「辅助功能」(macOS Sonoma+ 强制,不做 send 静默失败)
-#    install.sh 跑完会自动打开「系统设置 → 隐私与安全性 → 辅助功能」并定位到二进制路径
-#    把 /Users/<you>/.local/bin/wechat-bridge 拖进去勾上即可
+# 2) 首次发送需要给 wechatd / wechat-bridge 授予「辅助功能」权限
+#    安装器会给出提示，不会自动打开窗口。需要交互设置时运行：
+#    wechat-use doctor --fix-tcc
 #    详细 + TCC 故障 → docs/install.md#tcc
 
 # 3) 体检(任何时候出问题先跑这个)
@@ -101,15 +101,11 @@ wechat-use doctor
 # 4) 抽数据库 key (自动按 WeChat 版本适配)
 wechat-use init
 
-# 5) ⚠️ warmup —— 在 WeChat 客户端里【手动】给文件传输助手发一条消息(随便打个 "1" 都行)
-#    发送路径只在用户首次手动 send 之后才完全 wired,daemon 重启 / 升级后也要重做。
-#    不做的话 step 6 第一次会失败。详见 docs/troubleshooting.md#warmup
-
-# 6) 自测发消息 —— filehelper 是微信「文件传输助手」的 wxid,给自己发,看得到说明 send 通了
+# 5) 后台发送测试消息，无需手动选择聊天或先发一条预热消息
 wechat-use send "Hello 🎉" filehelper
 ```
 
-> ❗ 不要先跑 `wechat-use init` 再 `wechat-use auth activate` ——init 不需要激活码能跑通,但是 send / sessions / 等查询命令都需要激活,顺序反了会让你在 step 6 才发现没激活。
+> ❗ 不要先跑 `wechat-use init` 再 `wechat-use auth activate` ——init 不需要激活码能跑通,但是 send / sessions / 等查询命令都需要激活,顺序反了会让你在发送时才发现没激活。
 
 ---
 

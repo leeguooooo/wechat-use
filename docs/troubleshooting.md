@@ -10,7 +10,7 @@
 | `Not allowed to attach to process` | DevToolsSecurity 没开 / WeChat 没 get-task-allow | v1.8.16+ init 自动修；老版本手动跑诊断信息里的命令 |
 | `观察到 0 次触发` | 用户已登录但 init 错过了 key 写入时刻 | v1.8.13+ race fix 已修；如还 0 hits 贴诊断 |
 | `运行时指纹不一致` 警告 | Tencent 热更过运行时组件 | calibrate 自动重新适配；如失败贴诊断 |
-| init 卡 5 分钟超时 | 没及时点「进入 WeChat」按钮 | WeChat 重启后立刻点 / 扫码登录，否则抓不到 key |
+| init 超时 | 未登录、使用旧客户端或读取缓存尚不可用 | 确认工具专用微信 4.1.9 已登录并升级工具；默认 init 扫描现有进程，不需要重启微信 |
 
 v1.8.15+ 起，init 失败时**会在终端 inline dump 完整诊断**（`================ 诊断信息 ================`）—— 贴整段就够。
 
@@ -21,22 +21,17 @@ v1.8.15+ 起，init 失败时**会在终端 inline dump 完整诊断**（`======
 | `请先 wechat-use auth activate` | 还没激活 | DM bot 申请激活码 → `wechat-use auth activate <code>` |
 | `激活码已过期` | 过期了 | `wechat-use auth renew` 看如何重新申请 |
 | `unsupported WeChat build` | 当前 dylib 指纹还没在 profile API 注册 | 把 `wechat-use doctor` 输出贴给 bot，几小时内会推 |
-| 第一次 send 卡 60s | 发送路径还没 warmup | [见下方 warmup](#warmup) |
-| 消息发了但没到 | 检查 `wechat-use sessions` 里目标对话最新时间 | 重试一次 |
+| 首次发送较慢 | 后台准备聊天或等待送达核验 | 等待当前请求结束；保留诊断，不要并行重发 |
+| 消息结果未确认 | 可能仍在处理，或服务端确认尚未写入 | 先查看目标聊天记录；不要直接重发 |
 | 用户手动给别人发消息被路由错 | v1.9.0 早期 bug | v1.9.1 已修；升级到最新版本 |
 
 ### warmup
 
-WeChat macOS 客户端的发送路径**只在你第一次手动 send 之后才完全就绪**(框架内部的延迟绑定行为，不是 WeChat 的"反爬")。
+v1.18.3 的工具专用微信 4.1.9 路径会自动准备聊天，无需手动选择文件传输助手或预热发送。升级和工具重启后也不要求重新做手动预热。
 
-什么时候要 warmup:
-- 首次 `wechat-use init` 之后(任何全新机器)
-- daemon 重启 / 升级 wechat 之后
-- WeChat 自己重启之后(包括 Tencent 推热更)
+新账号的图片发送另有发送者校准要求：文件助手中至少需要 3 条已有记录；不足时返回 `self_sender_uncalibrated`，图片尚未提交。这项限制仍在改进。
 
-怎么 warmup:**在 WeChat 客户端里**给"文件传输助手"或任何对话**手动**发一条消息(随便 `1` `.` 都行)。
-
-v1.13.30+ daemon 会在路径未就绪时自动等 60s — 这期间你做完上面那个手动 send,daemon 检测到本地写入立刻 retry,**所以即使忘了 warmup 也不会真的失败**,只是 first send 慢 1-2 秒。如果 60s 内没发,会失败并提示重试。
+若微信暂停且没有其他正在执行的发送任务，可运行 `wechat-use unfreeze` 恢复当前专用微信。它不退出登录；恢复后先核对原消息是否已送达。
 
 ## auth / 激活
 

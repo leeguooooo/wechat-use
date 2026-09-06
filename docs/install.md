@@ -85,7 +85,8 @@ wechat-use auth activate wechatuse_xxxxxx
 # ↑ 弹 macOS Keychain 授权框,点「Always Allow」
 
 # step 2: 授权辅助功能(macOS Sonoma+ 强制)
-# install.sh 已自动打开「系统设置 → 隐私与安全性 → 辅助功能」并定位到
+# 安装器仅提示所需权限；需要打开系统设置时运行 wechat-use doctor --fix-tcc。
+# 需要授权的程序位于
 # /Users/<you>/.local/bin/wechat-bridge,把它拖进列表勾上即可。
 # 不做这一步,后面的 send 会静默失败(delivery_verify_timeout)。
 

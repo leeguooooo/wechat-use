@@ -3,7 +3,7 @@ name: wechat-use
 description: "macOS WeChat CLI + local HTTP bridge + Wechaty Puppet gRPC gateway — send messages, query sessions / contacts / chat history / images / favorites, and expose stable HTTP / gRPC surfaces for agent integration. Use when the user asks to 'send a WeChat message', '发微信', query WeChat contacts/groups/messages, look up who said what in a chat, fetch images from history, export chat history, wire WeChat into Hermes / n8n / Dify / LangChain, or run any wechaty bot on a real macOS WeChat account. Uses the installer-managed, isolated WeChat 4.1.9 clone on macOS (Apple Silicon) and a `wechatuse_` activation code. One-time `wechat-use init` extracts the DB key; no sudo, no re-signing WeChat.app. Optional remote bridge — `wechat-use tunnel setup --hostname YOUR_HOSTNAME` exposes the local REST API via Cloudflare Tunnel for remote services to call."
 metadata:
   author: leeguooooo
-  version: "1.18.0"
+  version: "1.18.3"
   platform: macOS-arm64
   requires:
     - macOS >= 14 (Apple Silicon)
@@ -15,13 +15,28 @@ metadata:
 
 # wechat — macOS CLI
 
-Unified CLI for WeChat on macOS. Send messages in pure background (zero UI flash) AND query the encrypted local databases for sessions, contacts, chat history, group members, Moments, favorites.
+Unified CLI for WeChat on macOS. Send messages and query the encrypted local databases for sessions, contacts, chat history, group members, Moments, favorites. Conversation selection runs inside the managed clone without activating or raising its windows.
 
 ## Managed WeChat 4.1.9 (v1.18.0+)
 
 The installer asks for confirmation, then copies a supported local 4.1.9 or downloads a pinned Tencent DMG. It installs `~/Applications/WeChat-4.1.9-wechat-use.app` with its own bundle ID and sandbox container, disables that clone's updates, and saves `~/.wx-rs/managed-wechat.json`.
 
-All CLI, daemon, HTTP bridge, and MCP operations default to that clone. Open the clone and let the user log in, then run `wechat-use init`. Do not substitute `open -a WeChat`, sign the primary `/Applications/WeChat.app`, remove the managed selection, or fall back to the primary when the clone is closed. Only 4.1.9 receives ongoing compatibility work. When repairing installation, rerun the installer; do not download the latest WeChat.
+All CLI, daemon, HTTP bridge, and MCP operations default to that clone. Check its current state first and reuse an existing login. If it is closed, launch it with `open -g "$HOME/Applications/WeChat-4.1.9-wechat-use.app"`. Request first-time login only when it is actually required, then run `wechat-use init`. Do not substitute `open -a WeChat`, sign the primary `/Applications/WeChat.app`, remove the managed selection, or fall back to the primary when the clone is closed. Only 4.1.9 receives ongoing compatibility work. When repairing installation, rerun the installer; do not download the latest WeChat.
+
+## Background execution
+
+Normal operations must preserve the user's foreground window. Do not call
+`open -a`, activate/raise/unminimize the clone, switch applications, or use
+foreground/global hotkeys as routine preparation. Use process-targeted input
+and background conversation navigation, and verify the exact recipient.
+This also applies to installation, initialization, permission errors, and service
+recovery. Return actionable diagnostics without automatically opening Settings,
+Finder, permission dialogs, or retrying a send. `doctor --fix-tcc` is an explicit
+interactive recovery command and opens System Settings.
+Foreground recovery is a last resort only after available background methods
+are shown to be unavailable. Never activate and blindly resend an unconfirmed
+message; inspect delivery first. A blank AX snapshot alone does not justify
+foreground recovery or restarting WeChat.
 
 ## Fast path (read this first)
 
@@ -96,6 +111,28 @@ Endpoints:
 | POST | `/typing` | typing indicator (only when `--shape hermes`) |
 | GET  | `/messages/stream?since=<epoch>` | new_messages_since polled into SSE; **pass `since`** or you'll get the full backlog on first connect |
 
+### Image-send prerequisites
+
+A newly initialized account currently needs at least three existing outgoing
+messages in File Transfer Assistant for sender calibration. If image sending
+returns `self_sender_uncalibrated`, no image was submitted. Do not manufacture
+messages to satisfy this requirement without the user's authorization.
+New-chat first-event delivery in CLI `listen` is still under validation.
+Ordinary files, videos and cards are not supported by native send yet.
+
+### Images over HTTP
+
+The image path must name a file on the bridge host. Native requests accept
+`image_path` (or `imagePath`); Hermes requests use `imagePath`. Omit the text
+field for an image-only request. Send text and images separately; combining
+both in one request is rejected instead of silently dropping content.
+
+```bash
+curl -X POST http://127.0.0.1:18400/send \
+  -H 'Content-Type: application/json' \
+  -d '{"wxid":"filehelper","image_path":"/absolute/path/photo.png"}'
+```
+
 ### SSE payload shape (v1.10.28 — Wechaty-aligned + isMentioned)
 
 `/messages/stream` emits `event: messages` carrying a JSON array of:
@@ -150,8 +187,8 @@ The full JSON Schema is committed at [`wx/schema/sse-payload-v1.10.28.schema.jso
 | Group | Commands | First-time requirement |
 |-------|----------|-----------------------|
 | Diagnostics | `doctor` | — (run first; checks AX permission, daemon status, WeChat binary fingerprint) |
-| Setup | `init` | requires user to click 进入 WeChat during the ~5 min window |
-| Send | `send` | first `send` after each WeChat restart fails with `delivery_verify_timeout` until the user manually types + Enters one message in WeChat to warm up the send pipeline (~5 s) |
+| Setup | `init` | Log in to the managed clone once; scans the running 4.1.9 process without restarting it. Reuse cached keys while queries work. |
+| Send | `send` | Automatically prepares the selected clone's chat context; no manual chat selection or warmup message. |
 | Query (messaging) | `sessions`, `unread`, `new-messages`, `contacts`, `history`, `search`, `members`, `stats`, `export`, `image`, `sent` (v1.16.12+, cross-chat self-sent) | `init` first; daemon auto-starts on demand (v1.7.5) |
 | Saved items | `favorites` | `init` first; daemon auto-starts on demand |
 | **Realtime (v1.3+)** | `listen` | daemon auto-starts on demand (v1.7.5) |
@@ -209,7 +246,7 @@ Correct flows for "给 XXX 发 YYY":
 | Image media (local in-memory lookup + CDN fallback) | ✅ | `wechat-use image get <messageId> --chat <id>` |
 | Voice media (raw SILK_V3) | ✅ | `wechat-use audio get <svr_id>` (1.13.21+) |
 | Voice transcribe (whisper.cpp + SILK pipeline) | ✅ | `wechat-use audio setup` 一次 + `wechat-use audio transcribe <svr_id>` (1.13.25+) |
-| 首发 warmup (manual, once per WeChat session) | required | first `send` errors with `delivery_verify_timeout`; user types one msg in WeChat then re-runs `wechat-use send` |
+| First-send chat context | automatic | The daemon selects and verifies the exact recipient before sending; the user does not need to click a chat or send a warmup message. |
 | **Realtime inbound stream (v1.3)** | ✅ | `wechat-use listen` — watches new messages, push to stdout |
 | **Inbound callback → shell command (v1.3)** | ✅ | `wechat-use listen --on-message "handler.sh"` (WECHAT_MSG_* env vars) |
 | **Server-side wxid filter (v1.3)** | ✅ | `wechat-use listen --wxid filehelper` |
@@ -243,56 +280,73 @@ esac
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-**Step 2 — Run `wechat-use init`** (required before any query command):
+**Step 2 — Initialize the already-logged-in managed WeChat**:
 
 ```bash
 wechat-use init
 ```
 
-Initialization targets only the managed 4.1.9 clone. Open that clone and ask the user to log in before running init. If a restart is required, it applies only to that clone. Tell the user:
-> "Going to briefly close and relaunch WeChat to extract the local database key. Any draft messages in WeChat will be lost — confirm before proceeding. **After WeChat relaunches, you must click 「进入 WeChat」 (or scan QR if no cached account) within ~5 minutes** — the key is only written during that sign-in."
+On the managed WeChat 4.1.9 this scans the existing process for per-database
+keys; it does not need to quit and relaunch WeChat. Keep the existing account,
+container and login state. Reuse cached keys while queries work, including
+after a daemon restart; only rescan when keys are missing or fail to decrypt.
 
-Key material is only written during the login moment, so `init` uses the macOS local debugging interface once during that window and waits up to 300 s. If the user misses the window or WeChat was already logged in before `init` ran, capture won't trigger — rerun `wechat-use init --force`.
+If WeChat itself is on a login screen, the user must complete that genuine
+login challenge. Do not manufacture a new challenge by restarting a logged-in
+clone, replacing its bundle identity, or deleting its local account data.
 
-Result is saved to `~/.wx-rs/` (mode 0600 files) + `~/.wx-rs/config.json`. Re-run `init` whenever WeChat restarts.
+**Step 3 — Check service permissions**:
 
-`init` also prints the detected WeChat version/build and a binary fingerprint check. If the fingerprint isn't in the verified set (e.g. a WeChat hot-fix shipped a new build), send/query may silently fail — repair the managed 4.1.9 clone using the installer and verify the auto-update toggle at WeChat → 设置 → 通用 → 「有更新时自动升级」 is off.
+```bash
+wechat-use doctor --json
+```
 
-**Step 3 — (For `send` only) Accessibility permission**:
+Check the running daemon's `daemon_accessibility` result and the bridge's
+health. Accessibility belongs to the installed helper identities; a signed
+upgrade should retain those grants. Request a system permission action only
+when the current diagnostics show that it is actually missing.
 
-Run `wechat-use doctor`. If the terminal hasn't been granted Accessibility yet, this pops the native macOS dialog **and** opens the Privacy & Security → Accessibility pane directly — no hunting. Toggle the terminal app ON, then quit + relaunch the terminal (macOS requires a restart for the permission to take effect).
+**Step 4 — Verify a send without manual chat selection**:
 
-If you prefer the manual path: System Settings → Privacy & Security → Accessibility → add the terminal app you're using (Terminal / iTerm / Warp / …).
+```bash
+wechat-use send "安装验证" filehelper --json
+```
 
-**Step 4 — (For `send` only) One-time first-send warmup per WeChat session**:
+The daemon reads the selected chat identity and uses background conversation navigation
+to select the exact requested recipient before typing. It checks the identity
+again before Enter. Missing build calibration, ambiguous context, a changed
+recipient, or an unavailable target stops the send before dispatch. Do not
+ask the user to click filehelper or send a warmup message as a normal setup step.
+The current local candidate requires a matching recipient-context calibration;
+distribution of this calibration is still pending and must be tested before release.
 
-`send` needs WeChat's send pipeline to be fully wired, which only happens after a real user-initiated send. The first `wechat-use send` after each WeChat restart fails with:
+Only a verified record in the requested chat counts as delivery. A
+`delivery_verify_timeout` can be a delayed delivery: inspect history before
+retrying. If automatic preparation fails, keep the diagnostic output and run
+`wechat-use doctor --json`; do not restart the logged-in WeChat or reactivate
+its account as a workaround.
 
-> `error: 消息发送路径已执行,但数据库核查窗口内没有找到匹配新消息。常见原因:WeChat 输入框还没 warmup,首次 send 之前需要在 WeChat 里手动发一条让发送路径建好。`
-
-Resolution (the error itself prints these steps):
-
-1. Open WeChat
-2. Click "文件传输助手" (filehelper)
-3. Type any short message (e.g. `hi`)
-4. Press Enter to send
-5. Re-run `wechat-use send` — succeeds on retry, and stays warm until WeChat restarts.
-
-This is intrinsic to WeChat's internal event loop; no automation can substitute. If `wechat-use doctor` reports `ax_trusted: true` and warmup still doesn't help, file an issue.
+An empty AX tree or blank automation screenshot is not proof that WeChat is
+blank, logged out, or frozen. Use process/CLI/database evidence and the user's
+visible state before diagnosing it. Never quit/relaunch a logged-in clone just
+to recover an automation snapshot.
 
 ---
 
 ## Send failure modes (agent self-recovery table)
 
-When `wechat-use send` returns `{ok: false, …}` or stderr matches the `reason:` slot in the support payload, agents should map the reason to the playbook below **before** asking the user to debug. The first three are recoverable inline; the rest need a human action that the agent should ask for explicitly.
+When `wechat-use send` returns `{ok: false, …}` or stderr matches the `reason:` slot in the support payload, use the playbook below before asking the user to debug. Diagnose in the background and request human action only for a confirmed step that cannot be completed there. Never infer permission to take focus from a failed send.
 
 | `reason:` slot | Root cause | Agent action |
 |---|---|---|
-| `delivery_verify_timeout` / `slot_send_bp_armed_no_fire` | WeChat (re)launched but its internal send pipeline not yet wired | Tell user: open WeChat → click 「文件传输助手」→ type any message → press Enter. Then retry `wechat-use send`. (See Step 4 above.) |
-| `wechat_not_running` | WeChat.app not launched | Open `~/Applications/WeChat-4.1.9-wechat-use.app`, then retry after the user logs in. Never launch the primary app as a fallback. |
+| `desktop_locked` | macOS system lock screen is active; no message was sent | Ask the user to unlock the Mac system screen. Keep the existing WeChat login and account data; do not request WeChat login or manual chat selection. Retry only after the desktop is unlocked. |
+| `delivery_misrouted` | Delivery landed in another chat | Stop further sends, identify the actual destination, and repair recipient selection. Do not silently retry or ask for manual warmup. |
+| `delivery_verify_timeout` | Send path ran but delivery is not yet confirmed | Inspect the requested chat history before retrying; a delayed message may still arrive. |
+| `slot_send_bp_armed_no_fire` | Automatic input-context preparation did not activate the send signal | Keep the diagnostic and run `wechat-use doctor --json`. Do not ask for manual warmup, restart WeChat, or reactivate the account. |
+| `wechat_not_running` | Selected clone is not running | Launch `open -g "$HOME/Applications/WeChat-4.1.9-wechat-use.app"`, then check whether the existing login recovered. Request login only if required. Never launch the primary app as a fallback. |
 | `slot_send_bp_failed_to_arm` (detail: `send adapter install did not complete within 30s`) | WeChat has `get-task-allow=false` (official default signing); wechatd's local debugging interface can't connect | Run `wechat-use doctor` to confirm `wechat_get_task_allow ✗`. Then ask the user to copy-run the **merge-mode re-sign block** that `install.sh` prints (or `wechat-use doctor` suggests). Needs sudo, must be run by the user. Do NOT use a replace-mode `codesign --entitlements ...` command — it strips WeChat's existing system entitlements and breaks TCC for WeChat itself. |
 | `daemon_accessibility FAIL` / `ax_trusted=false` after a recent install/upgrade | Multiple `ai.wechat.*` LaunchAgents on the machine — orchestrate (KeepAlive) re-spawned wechatd with a stale launchd responsibility chain | Re-run `curl -fsSL https://raw.githubusercontent.com/leeguooooo/wechat-use/main/install.sh \| bash`. v1.16.12+ install.sh bootouts every `ai.wechat.*.plist` and bootstraps in the right order. Don't try to surgically `launchctl kickstart` — it doesn't reset the responsibility chain. |
-| `tcc_accessibility_denied` (wechat-bridge or wechatd untrusted) | User hasn't dragged binaries into System Settings → Privacy & Security → 辅助功能, or dragged them but didn't toggle ON | Open the pane: `open "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"` + `open ~/.local/bin`. Tell user to drag both `wechatd` and `wechat-bridge` in **and** toggle both to ON. macOS strictly requires user-initiated drag — no automation can substitute. |
+| `tcc_accessibility_denied` (wechat-bridge or wechatd untrusted) | The required macOS Accessibility grant is missing | Confirm the missing grant with `wechat-use doctor --json` and report it without opening any windows. If interactive recovery is required, explain that `wechat-use doctor --fix-tcc` opens permission dialogs and System Settings; the user must enable the relevant grants. Do not run it as an automatic retry. |
 | `activation_*` / `subscription_*` / `unauthorized` | Activation code expired / not redeemed | `wechat-use auth status` to confirm. Then `wechat-use auth activate <code>`. Direct user to https://t.me/WechatCliBot to request an activation code (research / personal use only — no commercial inquiries answered). |
 | `dylib_fingerprint_unverified` | WeChat auto-updated to a build not in our verified set | `wechat-use doctor` shows the new fingerprint. Tell user to turn off WeChat auto-update (WeChat → 设置 → 通用 → 「有更新时自动升级」) and repair the managed 4.1.9 clone with the installer. Do not upgrade to another WeChat version. |
 
@@ -340,7 +394,7 @@ wechat-use send "draft" "李工" --dry-run --json
 | **success** | `wechat-use send TEXT RECIPIENT --json` 真发成功 | `{ok: true, sent: true, reason: null, diagnostic: {…SendResult 全字段…}}` |
 | **dry-run** | `--dry-run --json`(resolver OK + 不真发) | `{ok: true, dry_run: true, text, resolved_wxid}` |
 | **error (early)** | `--json` + 参数错 / resolver 找不到 / ambiguous / 网络断 | `{ok: false, exit_code: <int>, error: "<msg>"}` |
-| **error (send fail)** | 真发失败 (首发 warmup miss / TCC 缺 / WeChat 版本不在适配集) | `{ok: false, sent: false, reason: "<reason>", diagnostic: {…}}` |
+| **error (send fail)** | 发送失败或送达未确认（自动准备失败 / 权限缺失 / 版本未适配等）；核对 diagnostic 和历史记录 | `{ok: false, sent: false, reason: "<reason>", diagnostic: {…}}` |
 
 ```bash
 # 推荐:agent 用 jq 分支
@@ -695,7 +749,7 @@ Example user utterances and the right first call:
 
 ## Mechanism (brief)
 
-**`init`** — relaunches WeChat and uses the macOS public debugging interface once during the login moment to capture the local DB decryption material. No `codesign --force --deep` on `WeChat.app`, no `sudo`. The debugging interface detaches immediately after capture.
+**`init`** — reuses cached database keys when valid and otherwise scans the running managed clone through the macOS public debugging interface. Preserve the existing login; do not restart WeChat as routine initialization. The debugging interface detaches after capture.
 
 **Query commands** — load the captured material + discovered DB paths from local config and read the encrypted local databases directly. When the background daemon is running, queries are routed over a local Unix socket to a persistent connection pool — cuts latency 5-10×.
 

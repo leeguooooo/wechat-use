@@ -134,77 +134,6 @@ bridge_log_says_tcc_missing() {
     | grep -qE "Accessibility TCC (not granted|missing)"
 }
 
-# Probe whether a GUI is reachable from this script's session. curl|bash
-# over SSH or in CI has no Aqua session, so AppleScript dialogs would
-# fail with -1712 / -1719. Detect once so we can fall back to the text
-# banner instead of issuing a dialog that never paints.
-gui_available() {
-  osascript -e 'tell application "System Events" to return 1' >/dev/null 2>&1
-}
-
-# Drive the TCC grant via a modal dialog. Used in non-TTY (curl|bash)
-# scenarios where install.sh can't read stdin to gate progress on
-# "press Enter when done". Loops up to 3 rounds: open the two GUI
-# windows → display blocking dialog → user clicks 已勾选完毕 → we
-# re-probe --check-trust + bootout/bootstrap. Returns 0 on grant, 1 on
-# cancel or attempts exhausted.
-prompt_tcc_grant_via_dialog() {
-  local bridge="${INSTALL_DIR}/wechat-bridge"
-  local wechatd="${INSTALL_DIR}/wechatd"
-  local plist="$HOME/Library/LaunchAgents/ai.wechat.bridge.plist"
-  # v1.16.4: simple drag-binary flow (post-revert from .app bundle path).
-  # Drop legacy entries from any prior install layout. tccutil reset
-  # against a non-existent identifier is a no-op; against a real one
-  # nukes the row so the user's drag re-establishes binding cleanly.
-  tccutil reset Accessibility ai.wechatskill.helper >/dev/null 2>&1 || true
-  tccutil reset Accessibility ai.wechatskill.wechat-bridge >/dev/null 2>&1 || true
-  tccutil reset Accessibility ai.wechatskill.wechatd >/dev/null 2>&1 || true
-
-  open "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility" 2>/dev/null || true
-  sleep 1
-  # Open the install dir so user sees BOTH binaries side-by-side and
-  # can drag both in one shot. (Dogfood 2026-04-30: `open -R` only
-  # reveals one file → user thought wechat-bridge was the only thing
-  # needing AX, missed wechatd → send kept silently failing.)
-  open "${INSTALL_DIR}" 2>/dev/null || true
-  cat <<EOF
-
-  把以下两个 binary 都拖进 System Settings → 辅助功能 → 打开开关:
-    • ${wechatd}        ← 实际合成键盘事件的进程,关键
-    • ${bridge}         ← HTTP 网关,部分老路径要它
-
-EOF
-
-  # Live poll REAL TCC state. Bridge --check-trust returns 0 iff trusted;
-  # wechatd trust verified via `wechat doctor` JSON daemon_accessibility.
-  local elapsed=0
-  local interval=2
-  local cap=120
-  while (( elapsed < cap )); do
-    local bridge_ok=0
-    local wechatd_ok=0
-    "${bridge}" --check-trust >/dev/null 2>&1 && bridge_ok=1 || true
-    if "${INSTALL_DIR}/wechat" doctor --json 2>/dev/null \
-        | python3 -c "import sys,json; d=json.load(sys.stdin); sys.exit(0 if any(c['name']=='daemon_accessibility' and c['ok'] for c in d.get('checks',[])) else 1)" 2>/dev/null; then
-      wechatd_ok=1
-    fi
-    if (( bridge_ok && wechatd_ok )); then
-      launchctl bootout "gui/$(id -u)/ai.wechat.bridge" 2>/dev/null || true
-      sleep 1
-      if [[ -f "${plist}" ]]; then
-        launchctl bootstrap "gui/$(id -u)" "${plist}" 2>/dev/null || true
-      fi
-      wait_for_bridge_health 2>/dev/null || true
-      return 0
-    fi
-    info "等 Accessibility 授权… 把上面两个 binary 拖进 Settings 列表 + 打开开关 (${elapsed}s / ${cap}s,bridge=${bridge_ok} wechatd=${wechatd_ok})"
-    sleep "$interval"
-    elapsed=$(( elapsed + interval ))
-  done
-  warn "120s 内没等到 Accessibility 授权。在 System Settings → Privacy & Security → 辅助功能 把 wechat-bridge / wechatd 都拖进去开关 ON,然后跑 \`wechat doctor\` 复验。"
-  return 1
-}
-
 # Probe WeChat's get-task-allow entitlement.
 #
 # 官方分发的 WeChat 默认 `get-task-allow=false`(键根本不在 entitlements
@@ -779,10 +708,33 @@ offer_agent_skill_install() {
   fi
   case "$choice" in
     y|Y|yes|YES|Yes|1|true|是)
-      if npx -y skills add leeguooooo/wechat-use -y -g; then success 'wechat-use skill 已安装。'
-      else warn 'skill 未安装成功，不影响 CLI；可稍后重试。'; fi ;;
+      install_agent_skill ;;
     *) info '未安装可选 skill。需要时运行：npx -y skills add leeguooooo/wechat-use -y -g' ;;
   esac
+}
+
+install_agent_skill() {
+  local output status=0
+  output=$(npx -y skills add leeguooooo/wechat-use -y -g 2>&1) || status=$?
+  printf '%s\n' "$output"
+  # skills can exit 0 after a partial installation (for example, an agent
+  # without global-install support). Preserve its detail instead of claiming
+  # every selected agent succeeded.
+  if [[ "$status" != 0 ]]; then
+    warn 'skill 未安装成功，不影响 CLI；可稍后重试。'
+  elif printf '%s\n' "$output" | grep -q 'Failed to install'; then
+    warn 'skill 仅部分安装成功；请查看上方失败的 agent，不影响已成功安装的部分和 CLI。'
+  else
+    success 'wechat-use skill 已安装。'
+  fi
+}
+
+# Installation stays in the background. macOS permission grants require the
+# user's interaction, so expose the explicit recovery command without opening UI.
+remediate_tcc_grant() {
+  warn "Accessibility 权限未授权；安装已完成，发送功能需先授权。"
+  info "在方便时运行：${INSTALL_DIR}/wechat doctor --fix-tcc（会打开系统设置）"
+  info "需要授权的程序：${INSTALL_DIR}/wechatd 和 ${INSTALL_DIR}/wechat-bridge"
 }
 
 if [[ "${WECHAT_USE_INSTALL_LIB_ONLY:-0}" == "1" ]]; then
@@ -1262,72 +1214,6 @@ fi
 step '4/4 检查后台服务与剩余设置'
 run_service_phase
 
-# Drive the TCC remediation flow. Three branches:
-#   - interactive TTY → exec doctor --fix-tcc inline
-#   - GUI but non-TTY → drive via dialog prompt
-#   - neither → static fallback banner with manual instructions
-# Called from two trigger sites:
-#   1. Bridge crash-loops AND bridge log says "tcc_missing" (bridge layer).
-#   2. Bridge /health 200 BUT `wechat doctor` reports daemon_accessibility
-#      FAIL (wechatd layer — bridge serves health fine but wechatd's
-#      AXIsProcessTrusted() returns false → CGEventPostToPid silently
-#      dropped → send fails. Real customer dogfood found this gap on
-#      v1.12.1 install.sh upgrade — bridge /health 200 made install.sh
-#      claim "TCC OK" but wechatd was untrusted and send returned
-#      tcc_accessibility_denied).
-remediate_tcc_grant() {
-  if [[ -t 0 && -t 1 ]]; then
-    echo ""
-    warn "Accessibility TCC 未授权 —— 直接进交互修复"
-    echo ""
-    "${INSTALL_DIR}/wechat" doctor --fix-tcc || true
-  elif gui_available && prompt_tcc_grant_via_dialog; then
-    success "Accessibility TCC: 已授权 ✓ (dialog flow)"
-    warn_if_wechat_lacks_get_task_allow || true
-    maybe_smoke_send
-    echo ""
-  else
-    echo ""
-    printf '%s━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%s\n' "${C_RED}" "${C_RESET}"
-    printf '%s🛑 STOP — Accessibility 授权没勾，bridge / wechatd 无法发消息！%s\n' "${C_RED}" "${C_RESET}"
-    printf '%s━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%s\n' "${C_RED}" "${C_RESET}"
-    echo ""
-    echo "macOS Sonoma+ 要求 wechat-bridge 和 wechatd 在「辅助功能」清单里。没勾的话："
-    echo "  • wechat send 看似成功但消息其实没发出（tcc_accessibility_denied）"
-    echo "  • bridge 启动直接 exit 1，hermes / agent 平台拿不到数据"
-    echo ""
-    if gui_available; then
-      echo "已为你打开两个窗口（如果系统未弹出，请手动）："
-      open "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility" 2>/dev/null || true
-      sleep 1
-      # Open the whole install dir (not -R a single file) so user sees both
-      # wechatd AND wechat-bridge side-by-side in Finder, can drag both in
-      # one shot. dogfood (190, 2026-04-30): -R only reveals one file →
-      # users miss the other and assume the prompt is about wechat-bridge
-      # alone, leaving wechatd ungranted → send keeps silently failing.
-      open "${INSTALL_DIR}" 2>/dev/null || true
-      echo "  1. System Settings → 隐私与安全 → 辅助功能"
-      echo "  2. 在 Finder 窗口里**两个二进制**都拖进辅助功能清单："
-      echo "     • wechatd          ← 实际合成键盘事件的进程，没勾就是 send 静默失败的根因"
-      echo "     • wechat-bridge    ← HTTP 网关，少数老配置依赖它有 AX"
-      echo "  3. 拖进去后开关默认 ON；如果列表里已有同名条目（cdhash 失效的旧版），"
-      echo "     macOS 会自动用新拖入的覆盖，**不用先按「-」删**"
-    else
-      echo "（当前 session 无 GUI —— SSH / headless 装机请到目标机器物理屏前操作）"
-      echo "  1. 打开 System Settings → 隐私与安全 → 辅助功能"
-      echo "  2. 把以下两个二进制都拖进清单，打开右侧开关："
-      echo "     • ${INSTALL_DIR}/wechat-bridge"
-      echo "     • ${INSTALL_DIR}/wechatd"
-    fi
-    echo ""
-    printf '%s勾完后跑这条命令验证 + 重启 bridge：%s\n' "${C_YELLOW}" "${C_RESET}"
-    echo ""
-    printf '   %s%s/wechat doctor --fix-tcc%s\n' "${C_GREEN}" "${INSTALL_DIR}" "${C_RESET}"
-    echo ""
-    printf '%s━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%s\n' "${C_RED}" "${C_RESET}"
-    echo ""
-  fi
-}
 
 # TCC / health verification. Ground truth: /health 200 from the
 # launchd-spawned bridge AND wechatd's AXIsProcessTrusted() == true.

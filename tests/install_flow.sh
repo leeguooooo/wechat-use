@@ -148,3 +148,13 @@ echo 'PASS: byte comparison and optional skill opt-in; no headless tty access or
   if grep -E 'kickstart|bootout' "$TEST_ROOT/fresh-actions"; then exit 1; fi
 )
 echo 'PASS: first install creates its LaunchAgent and starts it once, without an immediate second restart'
+
+# Missing permissions must not open windows, reset grants, or block for input.
+open() { printf 'open\n' >> "$TEST_ROOT/actions"; }
+osascript() { printf 'osascript\n' >> "$TEST_ROOT/actions"; }
+tccutil() { printf 'tccutil\n' >> "$TEST_ROOT/actions"; }
+: > "$TEST_ROOT/actions"
+remediate_tcc_grant > "$TEST_ROOT/permission-guidance" 2>&1
+[[ ! -s "$TEST_ROOT/actions" ]]
+grep -F 'doctor --fix-tcc' "$TEST_ROOT/permission-guidance" >/dev/null
+echo 'PASS: missing permissions report explicit recovery without GUI, resets, or automatic sends'
