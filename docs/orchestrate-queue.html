@@ -11,11 +11,14 @@
 <tr><td>其他 4xx 或重定向</td><td>保留为 rejected，保留消息内容，等待检查与显式重试。不会跟随重定向。</td></tr>
 <tr><td>保留的未交付事件达到 10,000 条</td><td>停止取新事件，不以驱逐旧记录腾空容量。已完成事件保留去重标记并清除存储的消息正文。</td></tr>
 </tbody></table></section>
+<section><h2>断线后的源事件补读</h2><p>Orchestrate 按账号保存各消息分片的本地 ID 游标。事件入队与游标更新在同一事务中提交；队列满时保持原游标，释放容量后继续。推送用于及时通知，定期补读覆盖断线、进程重启、同秒消息、迟到写入和新增分片。</p><p>首次启用时，先为已有历史建立去重记录，不发送历史 webhook。数据库文件替换后，已有 server ID 的历史继续去重；没有 server ID、无法确认是否重复的历史记录保留为 rejected，需检查后显式重试。好友申请按数据库变更重新扫描，内容变化不依赖时间戳递增。</p></section>
 <section><h2>检查与恢复</h2><pre>wechat-use orchestrate queue list
 wechat-use orchestrate queue scopes
 wechat-use orchestrate queue --scope QUEUE_SCOPE list
-wechat-use orchestrate queue retry-inbound EVENT_ID</pre><p>列表默认只显示任务标识、状态、重试次数和错误，不输出聊天正文或凭据。旧目标的队列可以只读检查；重试必须使用匹配该队列的目标配置。</p><p>retry-inbound 只重新排入被拒绝的 webhook 事件，不直接发送微信。SaaS 必须按 X-Idempotency-Key 幂等处理重复请求。待核查的微信发送不会通过该命令重发。</p></section>
+wechat-use orchestrate queue show EVENT_ID
+wechat-use orchestrate queue show EVENT_ID --include-payload
+wechat-use orchestrate queue retry-inbound EVENT_ID</pre><p>列表默认只显示任务标识、状态、重试次数和错误，不输出聊天正文或凭据。只有 show --include-payload 显式显示指定事件正文；首次历史去重记录不占普通列表。旧目标的队列可以只读检查；重试必须使用匹配该队列的目标配置。</p><p>retry-inbound 只重新排入被拒绝的 webhook 事件，不直接发送微信。SaaS 必须按 X-Idempotency-Key 幂等处理重复请求。待核查的微信发送不会通过该命令重发。</p></section>
 <section><h2>升级与状态保留</h2><p>旧 JSONL 回执首次导入时绑定目标队列，原文件保留。旧 done 回执缺少送达确认时，转为不可自动重试的待核查回执。更换目标地址或 tenant 后，不会把旧回执导入新目标。</p><p>队列数据库位于实例状态目录的 orchestrate-queues 子目录，文件权限为 0600。配置中的 bearer 与 webhook secret 不保存在队列中。</p></section>
-<section><h2>验证范围</h2><p>16 项事务与 worker 恢复专项、74 项 Orchestrate 回归、22 项 SDK 回归通过；SaaS 模板的 43 项测试与 TypeScript 检查通过。测试包含真实本机 HTTP 请求和加密数据库夹具，外部 SaaS、真实微信收发及长期运行尚未验收。</p></section>
-<aside>当前可恢复已落盘的事件、任务和回执。断线期间尚未进入队列的源事件暂不自动补齐；源事件重放、真实环境持续运行及完整发布仍待验收。</aside>
+<section><h2>验证范围</h2><p>源补读专项通过，覆盖同秒及迟到消息、新分片、好友申请变化和数据库替换；持久队列、数据读取与 RPC 的 49 项回归通过。本轮另通过 74 项 Orchestrate 回归与 22 项网关回归，包含 Node 客户端兼容契约。测试使用本机 HTTP 请求和加密数据库夹具，外部 SaaS、真实微信收发及长期运行尚未验收。</p></section>
+<aside>源补读要求 daemon 支持 event_page；旧 daemon 不支持时，收件保持等待并重试，已有发送与回执任务继续运行。首次启用前的历史不会自动推送，本地数据库已经删除的数据无法恢复。此处描述 Orchestrate 路径，Wechaty gRPC 消费者独立续传、真实环境持续运行及发布仍待验收。</aside>
 </body></html>
