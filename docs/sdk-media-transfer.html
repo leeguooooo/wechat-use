@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Wechaty 媒体传输</title>
+<style>:root{--fg:#202724;--muted:#636c66;--accent:#16754a;--border:#d9e0dc}body{max-width:920px;margin:40px auto;padding:0 24px;color:var(--fg);font:16px/1.7 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}table{border-collapse:collapse;width:100%}td,th{border:1px solid var(--border);padding:12px;text-align:left}pre{white-space:pre-wrap;background:#f4f7f5;padding:16px}aside{color:var(--muted)}a{color:var(--accent)}</style></head>
+<body><header><h1>Wechaty 媒体传输</h1><p>配合包含本实现的 gateway 与 WechatUsePuppet 客户端使用。源码更新不会自动替换已安装的 daemon 或 gateway。</p></header>
+<section><h2>发送图片</h2><pre>import { FileBox } from 'file-box'
+
+await puppet.messageSendFile('filehelper', FileBox.fromFile('/local/photo.png'))
+await puppet.messageSendFile('filehelper', FileBox.fromBuffer(pngBytes, 'photo.png'))</pre><p>本地文件和 Buffer 经 Upload 上传，随后发送标准 UUID FileBox（type: 7）。base64 FileBox（type: 1）也可使用，但单条 gRPC 消息受传输大小限制，大图片应使用上传。服务端不读取调用方指定的本地路径。</p><p>当前原生管线只接收可识别的图片。视频、普通附件和卡片仍需独立的原生发送能力；文件扩展名不会把任意数据变成图片。图片提交后，只有 daemon 明确确认送达才返回成功。送达不确定时不会自动通过旧接口重发。</p></section>
+<section><h2>上传文件的有效期</h2><table><thead><tr><th>项目</th><th>行为</th></tr></thead><tbody>
+<tr><td>容量</td><td>每个文件最多 64 MiB；每个 gateway 最多同时保留 8 个上传中、待发送或正在使用的文件。</td></tr>
+<tr><td>超时</td><td>上传总时长 120 秒，连续 15 秒没有新数据中止。中断、错误和空上传均清理未完成文件。</td></tr>
+<tr><td>过期</td><td>完成上传后 5 分钟有效；定期清理过期文件。已进入发送或下载的文件在操作结束时清理。</td></tr>
+<tr><td>身份</td><td>绑定认证身份与当前微信账号。切换账号不能消费旧账号的 ID；JWT 更新不会改变其认证主体。</td></tr>
+<tr><td>一次性发送</td><td>发送前原子领取 ID；并发请求只有一个能领取。领取后发生失败或送达不确定，也不会恢复为可重复发送。</td></tr>
+<tr><td>下载</td><td>Download(id) 读取当前身份仍有效的上传文件，按 64 KiB 分块。下载不消费 ID；这不表示历史微信媒体已完成解密下载。</td></tr>
+</tbody></table></section>
+<aside>临时目录权限为 0700，文件为 0600。正常服务退出会清理文件；强制终止进程或系统崩溃可能留下私有临时目录。重启后旧上传 ID 失效，请重新上传。</aside>
+</body></html>

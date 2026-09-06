@@ -7,4 +7,6 @@ const puppet = new WechatUsePuppet({
   tls: { disable: true, serverName: 'localhost' },
 })
 const bot = WechatyBuilder.build({ puppet })
-await bot.start()</pre><p>token 使用与网关相同的 bearer。无 TLS 仅用于本机；远程使用 TLS 及相应 CA 配置。激活码与网关 bearer 分开管理。</p></section><section><h2>定位兼容性</h2><p>上游 PuppetService 1.19.9 将 protobuf 对象直接展开，定位数值会保留默认的 0。此类使用同一已鉴权连接读取 protobuf getter，返回正确的 latitude、longitude、address、name、accuracy；消息不存在、无定位或传输失败时保留错误。</p><p>其余方法沿用 PuppetService。此兼容层固定依赖 1.19.9，升级依赖时须重新运行客户端契约测试。</p></section><aside>客户端测试使用合成后台验证 gRPC 与标准 Wechaty 调用链。真实微信收发及未完成的网关能力，仍需按项目能力清单验收。</aside></body></html>
+await bot.start()</pre><p>token 使用与网关相同的 bearer。无 TLS 仅用于本机；远程使用 TLS 及相应 CA 配置。激活码与网关 bearer 分开管理。</p></section><section><h2>定位兼容性</h2><p>上游 PuppetService 1.19.9 将 protobuf 对象直接展开，定位数值会保留默认的 0。此类使用同一已鉴权连接读取 protobuf getter，返回正确的 latitude、longitude、address、name、accuracy；消息不存在、无定位或传输失败时保留错误。</p></section>
+<section><h2>图片发送</h2><pre>import { FileBox } from 'file-box'
+await puppet.messageSendFile('filehelper', FileBox.fromFile('/local/photo.png'))</pre><p>标准 FileBox 本地文件和 Buffer 会经 Upload 转为 UUID FileBox。上传最多 64 MiB，5 分钟内有效；发送只允许领取一次。当前 gateway 的原生发送管线仅支持图片，普通文件、视频、卡片仍待接入。</p><p>messageSendFile 在发送失败或送达不确定时保留错误，不会像上游 1.19.9 那样尝试旧发送接口。不要在异常处理里无条件重发；先确认实际送达状态。</p><p>其余方法沿用 PuppetService。此兼容层固定依赖 1.19.9，升级依赖时须重新运行客户端契约测试。</p></section><aside>客户端测试使用合成后台验证 gRPC 与标准 Wechaty 调用链。真实微信收发及未完成的网关能力，仍需按项目能力清单验收。</aside></body></html>
