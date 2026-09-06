@@ -94,6 +94,15 @@ describe("POST /api/wechat-inbound", () => {
     expect(rows[0].message_kind).toBe("text");
   });
 
+  it.each(["voice", "audio", "file", "attachment", "mp", "mini_program", "recall", "recalled", "contact", "location", "emoticon", "chat_history", "forward", "transfer", "red_envelope", "unknown"])("accepts the complete message type %s without losing source account", async kind => {
+    const event = { ...validEvent, account_id: "fixture-account", normalized: { ...validEvent.normalized, message_kind: kind }, raw_event: { message_kind: kind, local_id: 7 } };
+    const response = await postEvent(event);
+    expect(response.status).toBe(200);
+    const rows = readTable(d1, "wechat_inbound_events");
+    expect(rows).toHaveLength(1);
+    expect(JSON.parse(String(rows[0].raw_event))).toEqual({ message_kind: kind, local_id: 7, account_id: "fixture-account" });
+  });
+
   it("deduplicates: second push of same event_id returns ok but not stored again", async () => {
     await postEvent(validEvent);
     const res2 = await postEvent(validEvent);

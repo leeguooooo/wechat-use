@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Orchestrate 持久队列</title><style>
+:root{--fg:#202724;--muted:#636c66;--accent:#16754a;--border:#d9e0dc}body{max-width:960px;margin:40px auto;padding:0 24px;color:var(--fg);font:16px/1.65 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}h1{font-size:28px}h2{font-size:21px;margin-top:30px}table{border-collapse:collapse;width:100%;margin:18px 0}th,td{border:1px solid var(--border);padding:12px;text-align:left;vertical-align:top}th,pre{background:#f4f7f5}pre{padding:16px;border:1px solid var(--border);white-space:pre-wrap}a{color:var(--accent)}aside{color:var(--muted);border-left:3px solid var(--accent);padding-left:16px}
+</style></head><body>
+<header><h1>Orchestrate 持久队列</h1><p>收件、发送阶段和回执保存在本机 SQLite 队列。队列按配置中的 tenant、发件箱地址和 webhook 地址隔离；同一地址服务多个账号时，应分别配置 tenant。</p></header>
+<section><h2>处理规则</h2><table><thead><tr><th>情况</th><th>行为</th></tr></thead><tbody>
+<tr><td>微信未运行、进程在准备期间切换、发送租约不足</td><td>不调用原生发送，保存可重试回执。SaaS 确认失败回执并再次分配任务后重试。</td></tr>
+<tr><td>原生发送已经开始后超时或进程退出</td><td>保留待核查状态，不自动重发同一任务。重复领取时重放已有回执。</td></tr>
+<tr><td>发送已确认，ACK 网络请求失败</td><td>持续重试持久回执，不再次发送微信消息。回执在网络请求之前落盘。</td></tr>
+<tr><td>Webhook 网络错误、5xx、401/403、408/425/429</td><td>保留原消息与幂等键，按退避或 Retry-After 重试。更新同一目标的凭据后可继续处理。</td></tr>
+<tr><td>其他 4xx 或重定向</td><td>保留为 rejected，保留消息内容，等待检查与显式重试。不会跟随重定向。</td></tr>
+<tr><td>保留的未交付事件达到 10,000 条</td><td>停止取新事件，不以驱逐旧记录腾空容量。已完成事件保留去重标记并清除存储的消息正文。</td></tr>
+</tbody></table></section>
+<section><h2>检查与恢复</h2><pre>wechat-use orchestrate queue list
+wechat-use orchestrate queue scopes
+wechat-use orchestrate queue --scope QUEUE_SCOPE list
+wechat-use orchestrate queue retry-inbound EVENT_ID</pre><p>列表默认只显示任务标识、状态、重试次数和错误，不输出聊天正文或凭据。旧目标的队列可以只读检查；重试必须使用匹配该队列的目标配置。</p><p>retry-inbound 只重新排入被拒绝的 webhook 事件，不直接发送微信。SaaS 必须按 X-Idempotency-Key 幂等处理重复请求。待核查的微信发送不会通过该命令重发。</p></section>
+<section><h2>升级与状态保留</h2><p>旧 JSONL 回执首次导入时绑定目标队列，原文件保留。旧 done 回执缺少送达确认时，转为不可自动重试的待核查回执。更换目标地址或 tenant 后，不会把旧回执导入新目标。</p><p>队列数据库位于实例状态目录的 orchestrate-queues 子目录，文件权限为 0600。配置中的 bearer 与 webhook secret 不保存在队列中。</p></section>
+<section><h2>验证范围</h2><p>16 项事务与 worker 恢复专项、74 项 Orchestrate 回归、22 项 SDK 回归通过；SaaS 模板的 43 项测试与 TypeScript 检查通过。测试包含真实本机 HTTP 请求和加密数据库夹具，外部 SaaS、真实微信收发及长期运行尚未验收。</p></section>
+<aside>当前可恢复已落盘的事件、任务和回执。断线期间尚未进入队列的源事件暂不自动补齐；源事件重放、真实环境持续运行及完整发布仍待验收。</aside>
+</body></html>

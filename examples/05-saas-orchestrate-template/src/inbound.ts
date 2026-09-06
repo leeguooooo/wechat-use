@@ -1,3 +1,4 @@
+import { MESSAGE_KINDS } from "./types.js";
 /**
  * Inbound webhook endpoint — implements spec §3.4 + §4
  *
@@ -95,18 +96,7 @@ const NormalizedSchema = z.object({
   is_group: z.boolean(),
   sender_wxid: z.string(),
   sender_display_name: z.string(),
-  message_kind: z.enum([
-    "text",
-    "image",
-    "voice",
-    "video",
-    "file",
-    "url",
-    "quote",
-    "recall",
-    "system",
-    "mp",
-  ]),
+  message_kind: z.enum(MESSAGE_KINDS),
   text: z.string(),
   is_mentioned: z.boolean(),
   mentioned_ids: z.array(z.string()),
@@ -115,6 +105,7 @@ const NormalizedSchema = z.object({
 
 const InboundBodySchema = z.object({
   event_id: z.string().min(1),
+  account_id: z.string().optional(),
   ts: z.string(),
   normalized: NormalizedSchema,
   raw_event: z.record(z.unknown()),
@@ -179,7 +170,7 @@ inbound.post("/", async (c) => {
       normalized.text,
       normalized.is_mentioned ? 1 : 0,
       normalized.from_self ? 1 : 0,
-      JSON.stringify(raw_event)
+      JSON.stringify(body.account_id ? { ...raw_event, account_id: body.account_id } : raw_event)
     )
     .run();
 

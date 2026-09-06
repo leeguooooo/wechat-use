@@ -104,17 +104,12 @@ export interface FailResponse {
 
 // ─── Inbound event (spec §3.4) ────────────────────────────────────────────────
 
-export type MessageKind =
-  | "text"
-  | "image"
-  | "voice"
-  | "video"
-  | "file"
-  | "url"
-  | "quote"
-  | "recall"
-  | "system"
-  | "mp";
+export const MESSAGE_KINDS = [
+  "text", "image", "voice", "video", "file", "url", "quote", "recall", "system", "mp",
+  "audio", "attachment", "mini_program", "recalled", "contact", "location", "emoticon",
+  "chat_history", "forward", "transfer", "red_envelope", "unknown",
+] as const;
+export type MessageKind = typeof MESSAGE_KINDS[number];
 
 export interface NormalizedEvent {
   conversation_id: string;
@@ -130,6 +125,7 @@ export interface NormalizedEvent {
 
 export interface InboundBody {
   event_id: string;
+  account_id?: string;
   ts: string;
   normalized: NormalizedEvent;
   raw_event: Record<string, unknown>;
