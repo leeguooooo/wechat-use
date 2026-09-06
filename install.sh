@@ -22,8 +22,8 @@ PREFERRED_WECHAT_SOURCE="${WECHAT_419_SOURCE:-}"
 PREFERRED_WECHAT_TARGET="${WECHAT_419_TARGET:-$HOME/Applications/WeChat-4.1.9-wechat-use.app}"
 PREFERRED_WECHAT_BUNDLE_ID="com.tencent.xinWeChat419WechatUse"
 PREFERRED_WECHAT_NAME="${WECHAT_419_NAME:-微信 4.1.9（工具专用）}"
-WECHAT_419_ICON_URL="https://raw.githubusercontent.com/leeguooooo/wechat-use/83080eff227966590f201e2f0fb5642fd002844e/assets/wechat-tool-419.icns"
-WECHAT_419_ICON_SHA256="d6fefdd0ecd48defba4f3b8e876b1bf7ad7aef9d9122050af4385305abcacd91"
+WECHAT_419_ICON_URL="https://raw.githubusercontent.com/leeguooooo/wechat-use/1cb0f670437ca002fe778bad37ec4d02abdcdc31/assets/wechat-tool-419.icns"
+WECHAT_419_ICON_SHA256="dc2968342b225d5506b88607b7a79b9b69384a341555c42f36f37b7daeb28d09"
 
 # ANSI color helpers — only emit if stderr/stdout is a tty so logs piped to
 # files or grep stay readable.
