@@ -3,7 +3,7 @@ name: wechat-use
 description: "macOS WeChat CLI + local HTTP bridge + Wechaty Puppet gRPC gateway — send messages, query sessions / contacts / chat history / images / favorites, and expose stable HTTP / gRPC surfaces for agent integration. Use when the user asks to 'send a WeChat message', '发微信', query WeChat contacts/groups/messages, look up who said what in a chat, fetch images from history, export chat history, wire WeChat into Hermes / n8n / Dify / LangChain, or run any wechaty bot on a real macOS WeChat account. Uses the installer-managed, isolated WeChat 4.1.9 clone on macOS (Apple Silicon) and a `wechatuse_` activation code. One-time `wechat-use init` extracts the DB key; no sudo, no re-signing WeChat.app. Optional remote bridge — `wechat-use tunnel setup --hostname YOUR_HOSTNAME` exposes the local REST API via Cloudflare Tunnel for remote services to call."
 metadata:
   author: leeguooooo
-  version: "1.18.6"
+  version: "1.18.7"
   platform: macOS-arm64
   requires:
     - macOS >= 14 (Apple Silicon)
@@ -17,7 +17,7 @@ metadata:
 
 ## Setup failures and user reports (v1.18.7+)
 
-Release status: v1.18.7 is not published yet. The following capabilities apply to the candidate implementation. Check the public Release before advising an upgrade; do not ask v1.18.6 users to repeatedly click “修复安装” while v1.18.6 remains latest.
+Release status: v1.18.7 is published and marked latest. The capabilities below apply to the released build; users on older versions can upgrade with the README install command.
 
 Do not require users to identify their macOS version or whether this is a fresh install before helping. The setup window collects redacted environment and service facts automatically. Read the `WXS-…` problem code from an error screenshot; if more detail is needed, the user can click “复制诊断信息” on any setup page, including a waiting page. The window also provides a minimal report when core cannot start. Never request keys.json, activation tokens, raw memory output, or private chat data.
 
