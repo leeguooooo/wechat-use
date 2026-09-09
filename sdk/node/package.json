@@ -8,13 +8,22 @@
     ".": {
       "types": "./index.d.ts",
       "import": "./index.mjs"
+    },
+    "./bridge": {
+      "types": "./bridge.d.ts",
+      "import": "./bridge.mjs"
     }
   },
   "files": [
     "index.mjs",
     "README.html",
-    "index.d.ts"
+    "index.d.ts",
+    "bridge.mjs",
+    "bridge.d.ts"
   ],
+  "scripts": {
+    "test": "node --test bridge.test.mjs"
+  },
   "engines": {
     "node": ">=18"
   },
