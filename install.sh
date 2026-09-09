@@ -1403,6 +1403,9 @@ HELPER_APP_LEGACY="$HOME/Applications/WechatSkillHelper.app"
 LAUNCHAGENT_PLIST="$HOME/Library/LaunchAgents/ai.wechat.bridge.plist"
 if [[ -d "${HELPER_APP_LEGACY}" ]]; then
   info "清理 v1.16.0~3 残留:删除 ${HELPER_APP_LEGACY}"
+  # Unregister from LaunchServices before deleting, else a ghost entry lingers
+  # (shows as a duplicate app in Spotlight/Launchpad after the rename).
+  /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -u "${HELPER_APP_LEGACY}" >/dev/null 2>&1 || true
   rm -rf "${HELPER_APP_LEGACY}"
 fi
 if [[ -f "${LAUNCHAGENT_PLIST}" ]]; then
