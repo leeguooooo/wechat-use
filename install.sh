@@ -822,7 +822,14 @@ install_setup_service() {
   install_binary_atomically "$source" "$destination"
 }
 
-setup_app_path() { printf '%s/Applications/WechatUseSetup.app\n' "$HOME"; }
+# Installed under the Chinese bundle name so Spotlight/Launchpad find it by the
+# name users are told to search ("微信工具设置"). Spotlight indexes an app by its
+# filename, not by CFBundleDisplayName, so the .app on disk must carry the
+# Chinese name. The tarball still ships WechatUseSetup.app (ASCII); the rename
+# happens here at install time. setup_app_legacy_path is the old English name we
+# migrate away from.
+setup_app_path() { printf '%s/Applications/微信工具设置.app\n' "$HOME"; }
+setup_app_legacy_path() { printf '%s/Applications/WechatUseSetup.app\n' "$HOME"; }
 setup_state_dir() { printf '%s/.wx-rs\n' "$HOME"; }
 
 install_setup_window() {
@@ -850,6 +857,15 @@ install_setup_window() {
       rm -rf "$temporary"; return 1
     fi
     rm -rf "$temporary"
+  fi
+  # Migrate away from the old English bundle name. It shares the bundle id
+  # (ai.wechatskill.setup), so leaving it would surface as a duplicate app in
+  # Spotlight/Launchpad. Unregister before deleting so no ghost entry lingers.
+  local legacy_app; legacy_app=$(setup_app_legacy_path)
+  if [[ "$legacy_app" != "$target" && -d "$legacy_app" ]] \
+     && [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$legacy_app/Contents/Info.plist" 2>/dev/null)" == ai.wechatskill.setup ]]; then
+    /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -u "$legacy_app" >/dev/null 2>&1 || true
+    rm -rf "$legacy_app"
   fi
   install_setup_service || return 1
   python3 - "$INSTALL_DIR/wechat" "$target" "${LATEST_TAG#v}" "$(setup_state_dir)" <<'PYSETUP'
