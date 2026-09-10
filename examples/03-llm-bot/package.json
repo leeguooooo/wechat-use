@@ -1,0 +1,11 @@
+{
+  "name": "wechat-use-example-llm-bot",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "wechaty": "1.20.2",
+    "openai": "^4.104.0",
+    "@wechat-use/client": "file:../../sdk/node"
+  }
+}
