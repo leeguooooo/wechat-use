@@ -268,6 +268,11 @@ warn_if_wechat_lacks_get_task_allow() {
 # Skipped silently when prerequisites (init / auth / WeChat running)
 # aren't in place — this is a smoke test, not an init replacement.
 maybe_smoke_send() {
+  # `wechat-use upgrade` sets this: an upgrade must never send a message.
+  if [[ "${WECHAT_USE_NO_TEST_MESSAGE:-0}" == 1 ]]; then
+    info '升级模式：不发送测试消息。'
+    return 0
+  fi
   if [[ "${SERVICES_REUSED:-0}" == 1 ]]; then
     info '保留现有服务，跳过重复测试消息。'
     return 0
@@ -848,6 +853,14 @@ install_wechat_use_command() {
     warn 'wechat-use 启动脚本安装失败，保留命令别名。'
     link_wechat_use_alias "$link"
   fi
+}
+
+# Final setup step. WECHAT_USE_NO_TEST_MESSAGE=1 (set by `wechat-use upgrade`)
+# keeps service, permission and clone preparation but skips the test message.
+run_setup_step() {
+  local -a args=(setup)
+  [[ "${WECHAT_USE_NO_TEST_MESSAGE:-0}" == 1 ]] && args+=(--skip-verify)
+  "$INSTALL_DIR/wechat" "${args[@]}"
 }
 
 open_permission_windows() {
@@ -1720,7 +1733,7 @@ esac
 # to reactivate/reinitialize merely because they ran the installer again.
 if [[ "${SETUP_WINDOW_AVAILABLE:-0}" == 1 ]]; then
   if [[ "${WECHAT_SETUP_DEFER:-0}" != 1 ]]; then
-    "$INSTALL_DIR/wechat" setup || { warn '设置尚未完成，稍后打开“微信工具设置”即可继续，已有数据保留。'; exit 1; }
+    run_setup_step || { warn '设置尚未完成，稍后打开“微信工具设置”即可继续，已有数据保留。'; exit 1; }
   fi
   success '安装完成；后续可从“微信工具设置”继续检查或恢复。'
   if [[ "${WECHAT_USE_INSTALL_SKILL:-no}" == yes ]]; then offer_agent_skill_install; fi

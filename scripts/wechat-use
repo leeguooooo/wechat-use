@@ -320,8 +320,11 @@ wu_upgrade() {
   # the 4.1.9 clone choice is fixed to yes, the skill question is answered by
   # WECHAT_USE_INSTALL_SKILL (yes only when an installer-managed skill exists),
   # and the permission guide only appears when macOS permission is missing.
+  # WECHAT_USE_NO_TEST_MESSAGE=1: an upgrade never sends a WeChat message
+  # (setup runs with --skip-verify; the legacy filehelper smoke send is skipped).
   INSTALL_DIR="$install_dir" WECHAT_USE_PREFER_419="${WECHAT_USE_PREFER_419:-yes}" \
-    WECHAT_USE_INSTALL_SKILL="$skill_choice" bash "$installer" || status=$?
+    WECHAT_USE_INSTALL_SKILL="$skill_choice" WECHAT_USE_NO_TEST_MESSAGE=1 \
+    bash "$installer" || status=$?
   rm -rf -- "$stage"
   if [[ "$status" != 0 ]]; then
     printf 'wechat-use upgrade: the installer stopped (exit %s); existing data and login are kept. Re-run: wechat-use upgrade\n' "$status" >&2

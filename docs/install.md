@@ -57,7 +57,7 @@ wechat-use upgrade --check   # 只检查：wechat-use 1.18.12 -> 1.19.0
 wechat-use upgrade --json    # 同 --check，输出 JSON
 ```
 
-`upgrade` 下载 main 分支的 `install.sh`，以 `INSTALL_DIR=<当前安装目录>`、`WECHAT_USE_PREFER_419=yes` 运行，和 README 的安装命令是同一条路径，不需要回答问题。已通过安装器装过 skill（`~/.agents/skills/wechat-use` 等目录）时传 `WECHAT_USE_INSTALL_SKILL=yes` 一并刷新，否则传 `no`；Claude Code 插件执行 `claude plugin update wechat-use@leeguooooo-plugins`，git 检出执行 `git pull --ff-only`。退出码：0 成功或已是最新，2 检查或下载失败，1 未完成（安装器中途停止，或某个 skill 没能刷新）。
+`upgrade` 下载 main 分支的 `install.sh`，以 `INSTALL_DIR=<当前安装目录>`、`WECHAT_USE_PREFER_419=yes` 运行，和 README 的安装命令是同一条路径，不需要回答问题。升级不发送任何微信消息：另设 `WECHAT_USE_NO_TEST_MESSAGE=1`，最后的 `wechat setup` 带 `--skip-verify` 运行（照常准备后台服务、权限和副本，只跳过测试消息），旧版流程里的 filehelper 自检也跳过。普通安装不设该变量，行为不变。已通过安装器装过 skill（`~/.agents/skills/wechat-use` 等目录）时传 `WECHAT_USE_INSTALL_SKILL=yes` 一并刷新，否则传 `no`；Claude Code 插件执行 `claude plugin update wechat-use@leeguooooo-plugins`，git 检出执行 `git pull --ff-only`。退出码：0 成功或已是最新，2 检查或下载失败，1 未完成（安装器中途停止，或某个 skill 没能刷新）。
 
 任意 `wechat-use` 命令每 24 小时最多查一次最新 release（2 秒超时，后台进行，缓存在 `~/.cache/wechat-use/update-check.json`），有新版时在 stderr 打印一行提示，stdout 不受影响。设置 `CI`、`WECHAT_USE_NO_UPDATE_CHECK` 或 `USE_NO_UPDATE_CHECK` 可关闭；`upgrade`、`--version`、`--help` 不检查。
 

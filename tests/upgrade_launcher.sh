@@ -16,6 +16,7 @@ mkdir -p "$HOME" "$TEST_ROOT/fake-bin" "$TEST_ROOT/install"
 unset CI WECHAT_USE_NO_UPDATE_CHECK USE_NO_UPDATE_CHECK GITHUB_TOKEN WECHAT_USE_BIN 2>/dev/null || true
 export PATH="$TEST_ROOT/fake-bin:$PATH"
 export FAKE_LOG="$TEST_ROOT/calls.log"
+export REPO_ROOT
 export FAKE_VERSION_FILE="$TEST_ROOT/version"
 export FAKE_LATEST_FILE="$TEST_ROOT/latest"
 : >"$FAKE_LOG"
@@ -31,6 +32,8 @@ case "${1:-}" in
   -V|--version) printf 'wechat-use %s\n' "$(cat "$FAKE_VERSION_FILE")"; exit 0 ;;
   -h|--help) printf 'Usage: wechat [OPTIONS] <COMMAND>\n\nCommands:\n  update-guard        WeChat auto-update lock\n  sessions            list\n'; exit 0 ;;
 esac
+printf 'wechat %s\n' "$*" >>"$FAKE_LOG"
+[[ "${1:-}" == setup ]] && exit 0
 printf 'binary:%s\n' "$*"
 exit 7
 EOF
@@ -58,8 +61,19 @@ case "$url" in
   https://raw.githubusercontent.com/leeguooooo/wechat-use/main/install.sh)
     cat >"$out" <<'INSTALLER'
 #!/usr/bin/env bash
-printf 'installer INSTALL_DIR=%s PREFER_419=%s INSTALL_SKILL=%s\n' "$INSTALL_DIR" "$WECHAT_USE_PREFER_419" "$WECHAT_USE_INSTALL_SKILL" >>"$FAKE_LOG"
+set -euo pipefail
+printf 'installer INSTALL_DIR=%s PREFER_419=%s INSTALL_SKILL=%s NO_TEST_MESSAGE=%s\n' "$INSTALL_DIR" "$WECHAT_USE_PREFER_419" "$WECHAT_USE_INSTALL_SKILL" "${WECHAT_USE_NO_TEST_MESSAGE:-}" >>"$FAKE_LOG"
 [[ "${FAKE_INSTALLER_FAIL:-0}" == 1 ]] && exit 5
+# Run the real installer's message-capable steps with every precondition met,
+# so only WECHAT_USE_NO_TEST_MESSAGE stands between them and a send.
+WECHAT_USE_INSTALL_LIB_ONLY=1 source "$REPO_ROOT/install.sh"
+installer_subscription_state() { echo active; }
+wechat_get_task_allow_state() { echo true; }
+ps() { printf '%s\n' "$PREFERRED_WECHAT_TARGET/Contents/MacOS/WeChat"; }
+mkdir -p "$HOME/.wx-rs/com_tencent_xinWeChat419WechatUse"
+touch "$HOME/.wx-rs/com_tencent_xinWeChat419WechatUse/config.json"
+maybe_smoke_send >/dev/null
+run_setup_step
 cat "$FAKE_LATEST_FILE" | sed 's/^v//' >"$FAKE_VERSION_FILE"
 INSTALLER
     ;;
@@ -260,7 +274,9 @@ echo 'PASS: exit 2 when the check fails'
 : >"$FAKE_LOG"
 run upgrade
 [[ "$STATUS" == 0 ]] || fail "upgrade exit $STATUS: $ERR"
-grep -Fqx "installer INSTALL_DIR=$INSTALL_DIR PREFER_419=yes INSTALL_SKILL=yes" "$FAKE_LOG" || fail "installer env: $(cat "$FAKE_LOG")"
+grep -Fqx "installer INSTALL_DIR=$INSTALL_DIR PREFER_419=yes INSTALL_SKILL=yes NO_TEST_MESSAGE=1" "$FAKE_LOG" || fail "installer env: $(cat "$FAKE_LOG")"
+grep -Fqx 'wechat setup --skip-verify' "$FAKE_LOG" || fail "setup must run with --skip-verify: $(cat "$FAKE_LOG")"
+! grep -q '^wechat send' "$FAKE_LOG" || fail "upgrade must never send: $(cat "$FAKE_LOG")"
 [[ "$OUT" == *'wechat-use 1.18.12 -> 1.19.1'* ]] || fail "prints what changed: $OUT"
 grep -Fqx 'claude plugin update wechat-use@leeguooooo-plugins' "$FAKE_LOG" || fail 'plugin refreshed'
 [[ "$OUT" == *'skill (installer):'*'refreshed by the installer'* ]] || fail "installer skill reported: $OUT"
@@ -281,7 +297,8 @@ git -C "$HOME/.agents/use-family/wechat-use" remote set-url origin "$TEST_ROOT/s
 rm -rf "$HOME/.agents/skills/wechat-use" "$HOME/.codex/skills/wechat-use"
 echo 1.18.12 >"$FAKE_VERSION_FILE"; : >"$FAKE_LOG"
 run upgrade
-grep -q 'INSTALL_SKILL=no' "$FAKE_LOG" || fail 'no skill -> INSTALL_SKILL=no'
+grep -q 'INSTALL_SKILL=no NO_TEST_MESSAGE=1' "$FAKE_LOG" || fail 'no skill -> INSTALL_SKILL=no'
+! grep -q '^wechat send' "$FAKE_LOG" || fail 'upgrade must never send'
 # Installer failure: exit 1, clear message.
 echo 1.18.12 >"$FAKE_VERSION_FILE"
 FAKE_INSTALLER_FAIL=1 run upgrade
