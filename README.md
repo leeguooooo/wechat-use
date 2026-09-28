@@ -61,7 +61,7 @@ curl -fsSL https://raw.githubusercontent.com/leeguooooo/wechat-use/main/install.
 
 v1.18.7 增加问题代码、“复制诊断信息”和系统确认入口，已发布为正式版。用 README 的安装命令升级即可获得；v1.18.6 用户可在错误页点一次“修复安装”。
 
-**升级**：`wechat-use upgrade` 用同一个安装器升级到最新 release，并刷新已装的 skill；`wechat-use upgrade --check` 只检查不改动。有新版本时，任意 `wechat-use` 命令每天最多在 stderr 提示一次，设置 `WECHAT_USE_NO_UPDATE_CHECK=1` 可关闭。还没有 `upgrade` 命令的旧版本，重跑上面的安装命令即可。
+**升级**：`wechat-use upgrade` 用同一个安装器升级到最新 release，并刷新已装的 skill；`wechat-use upgrade --check` 只检查不改动。`wechat-use` 每 24 小时最多查一次新版本；有新版本时，命令会在 stderr 多打印一行提示，设置 `WECHAT_USE_NO_UPDATE_CHECK=1` 可关闭。还没有 `upgrade` 命令的旧版本，重跑上面的安装命令即可。
 
 [设置问题处理指南](./docs/setup-support.html)
 

@@ -213,10 +213,10 @@ wu_print_skills() {
   done
 }
 
-# Refresh plugin / git skills. Installer-managed folders were refreshed by the
-# installer itself (WECHAT_USE_INSTALL_SKILL=yes).
+# Refresh plugin / git skills. Installer-managed folders are refreshed by the
+# installer itself (WECHAT_USE_INSTALL_SKILL=yes), so only when it ran ($1=1).
 wu_refresh_skills() {
-  local entry channel rest path failed=0
+  local installer_ran="${1:-0}" entry channel rest path failed=0
   for entry in "${WU_SKILLS[@]+"${WU_SKILLS[@]}"}"; do
     channel=${entry%%$'\t'*}; rest=${entry#*$'\t'}; path=${rest%%$'\t'*}
     case "$channel" in
@@ -235,7 +235,13 @@ wu_refresh_skills() {
           failed=1
         fi ;;
       installer)
-        printf 'skill (installer): %s refreshed by the installer\n' "$path" ;;
+        if [[ "$installer_ran" == 1 ]]; then
+          printf 'skill (installer): %s refreshed by the installer\n' "$path"
+        else
+          # The CLI is current, so the installer did not run; copied folders
+          # are not re-copied behind the user's back (docs/upgrade.md).
+          printf 'skill (installer): %s not refreshed (CLI already current); to re-copy it: npx -y skills add %s -y -g\n' "$path" "$WU_REPO"
+        fi ;;
     esac
   done
   return "$failed"
@@ -293,7 +299,7 @@ wu_upgrade() {
 
   if ! wu_version_gt "$latest" "$current"; then
     printf '%s %s is up to date\n' "$WU_NAME" "$current"
-    wu_refresh_skills || true
+    wu_refresh_skills 0 || true
     return 0
   fi
 
@@ -324,7 +330,7 @@ wu_upgrade() {
   after=$(wu_current_version) || after="?"
   wu_write_cache "$(wu_now)" "$latest" || true
   printf '%s %s -> %s\n' "$WU_NAME" "$current" "$after"
-  wu_refresh_skills || true
+  wu_refresh_skills 1 || true
   return 0
 }
 

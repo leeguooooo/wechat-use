@@ -265,6 +265,7 @@ grep -Fqx 'claude plugin update wechat-use@leeguooooo-plugins' "$FAKE_LOG" || fa
 : >"$FAKE_LOG"
 run upgrade
 [[ "$STATUS" == 0 && "$OUT" == *'is up to date'* ]] || fail 'already current'
+[[ "$OUT" == *'skill (installer):'*'not refreshed (CLI already current)'* && "$OUT" != *'refreshed by the installer'* ]] || fail "no false refresh claim: $OUT"
 ! grep -q '^installer' "$FAKE_LOG" || fail 'installer must not run when current'
 # No installer-managed skill: the installer is told not to install one.
 rm -rf "$HOME/.agents/skills/wechat-use" "$HOME/.codex/skills/wechat-use"
