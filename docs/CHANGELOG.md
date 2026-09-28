@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 未发布
+
+- 新增 `wechat-use upgrade`（`--check` / `--json`）：用安装器升级到最新 release，并刷新 Claude Code 插件、git 检出或安装器管理的 skill。
+- 有新版本时，`wechat-use` 命令每天最多在 stderr 提示一次；`CI`、`WECHAT_USE_NO_UPDATE_CHECK`、`USE_NO_UPDATE_CHECK` 可关闭。
+- `wechat-use` 由软链改为同版本 tag 的启动脚本 `scripts/wechat-use`，其他命令原样交给 `wechat`；旧 release 仍安装软链。
+
 ## v1.18.12
 
 - 设置验证失败时显示已识别的具体原因，不再统一只提示“未确认送达”。
