@@ -201,8 +201,12 @@ grep -q 'Authorization: Bearer tok-placeholder' "$FAKE_LOG" || fail 'GITHUB_TOKE
 # Skill channels: plugin, git checkout (via symlink), installer-managed copy, duplicate symlink.
 mkdir -p "$HOME/.claude/plugins" "$HOME/.agents/use-family" "$HOME/.agents/skills" "$HOME/.codex/skills" "$HOME/.claude/skills"
 printf '{"version": 2, "plugins": {"wechat-use@leeguooooo-plugins": [{"installPath": "x"}]}}\n' >"$HOME/.claude/plugins/installed_plugins.json"
-git init -q "$HOME/.agents/use-family/wechat-use"
-touch "$HOME/.agents/use-family/wechat-use/SKILL.md"
+# A local "remote" so `git pull --ff-only` works offline.
+git init -q "$TEST_ROOT/skill-src"
+touch "$TEST_ROOT/skill-src/SKILL.md"
+git -C "$TEST_ROOT/skill-src" add SKILL.md
+git -C "$TEST_ROOT/skill-src" -c user.name=t -c user.email=t@example.invalid commit -qm init
+git clone -q "$TEST_ROOT/skill-src" "$HOME/.agents/use-family/wechat-use"
 ln -s "$HOME/.agents/use-family/wechat-use" "$HOME/.claude/skills/wechat-use"
 mkdir -p "$HOME/.agents/skills/wechat-use"; touch "$HOME/.agents/skills/wechat-use/SKILL.md"
 ln -s "$HOME/.agents/skills/wechat-use" "$HOME/.codex/skills/wechat-use"
@@ -261,12 +265,18 @@ grep -Fqx "installer INSTALL_DIR=$INSTALL_DIR PREFER_419=yes INSTALL_SKILL=yes" 
 grep -Fqx 'claude plugin update wechat-use@leeguooooo-plugins' "$FAKE_LOG" || fail 'plugin refreshed'
 [[ "$OUT" == *'skill (installer):'*'refreshed by the installer'* ]] || fail "installer skill reported: $OUT"
 [[ "$(cat "$FAKE_VERSION_FILE")" == 1.19.1 ]] || fail 'binary upgraded'
+[[ "$OUT" == *'skill (git):'*'updated'* ]] || fail "git skill pulled: $OUT"
 # Already current: installer not run.
 : >"$FAKE_LOG"
 run upgrade
 [[ "$STATUS" == 0 && "$OUT" == *'is up to date'* ]] || fail 'already current'
 [[ "$OUT" == *'skill (installer):'*'not refreshed (CLI already current)'* && "$OUT" != *'refreshed by the installer'* ]] || fail "no false refresh claim: $OUT"
 ! grep -q '^installer' "$FAKE_LOG" || fail 'installer must not run when current'
+# A skill that cannot be refreshed (diverged checkout) is reported and exits 1, not forced.
+git -C "$HOME/.agents/use-family/wechat-use" remote set-url origin "$TEST_ROOT/missing-remote"
+run upgrade
+[[ "$STATUS" == 1 && "$ERR" == *'not updated'*'not forcing'* ]] || fail "skill refresh failure: $STATUS $ERR"
+git -C "$HOME/.agents/use-family/wechat-use" remote set-url origin "$TEST_ROOT/skill-src"
 # No installer-managed skill: the installer is told not to install one.
 rm -rf "$HOME/.agents/skills/wechat-use" "$HOME/.codex/skills/wechat-use"
 echo 1.18.12 >"$FAKE_VERSION_FILE"; : >"$FAKE_LOG"
