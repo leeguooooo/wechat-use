@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 未发布
+
+- `daemon busy` 报错写明等待时长（例如 `history` got no reply within 10s）。
+
 ## v1.18.16
 
 - 修复 `doctor --paths` 在托管副本上误报 `query_ready=false`：数据库目录与密钥现在取自同一账号目录，和 daemon 一致。
