@@ -332,6 +332,10 @@ wu_upgrade() {
   fi
   local after
   after=$(wu_current_version) || after="?"
+  if [[ ! "$after" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || wu_version_gt "$latest" "$after"; then
+    printf 'wechat-use upgrade: installer finished but CLI is %s; expected %s or newer\n' "$after" "$latest" >&2
+    return 1
+  fi
   wu_write_cache "$(wu_now)" "$latest" || true
   printf '%s %s -> %s\n' "$WU_NAME" "$current" "$after"
   wu_refresh_skills 1 || return 1

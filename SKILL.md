@@ -846,6 +846,8 @@ If the agent sees `wechat: command not found` after an `npx skills update`, it s
 
 ## Upgrade
 
+The launcher command below is pending the next release that includes it. v1.18.13 and earlier still require the documented `install.sh` command to upgrade.
+
 When any `wechat-use` command prints `wechat-use X is available`, tell the user and offer to run
 `wechat-use upgrade` (it updates the CLI and this skill). Check without changing anything:
 `wechat-use upgrade --check`. The user may also just say "升级 wechat-use" / "upgrade wechat-use".

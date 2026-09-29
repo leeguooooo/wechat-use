@@ -782,6 +782,7 @@ offer_agent_skill_install() {
   fi
   if ! command -v npx >/dev/null 2>&1; then
     info '可选：安装 Node.js 后，用 npx -y skills add leeguooooo/wechat-use -y -g 接入 AI agent。'
+    if [[ "${WECHAT_USE_NO_TEST_MESSAGE:-0}" == 1 && "$choice" == yes ]]; then return 1; fi
     return 0
   fi
   if [[ "$choice" == ask ]]; then
@@ -805,8 +806,10 @@ install_agent_skill() {
   # every selected agent succeeded.
   if [[ "$status" != 0 ]]; then
     warn 'skill 未安装成功，不影响 CLI；可稍后重试。'
+    if [[ "${WECHAT_USE_NO_TEST_MESSAGE:-0}" == 1 ]]; then return 1; fi
   elif printf '%s\n' "$output" | grep -q 'Failed to install'; then
     warn 'skill 仅部分安装成功；请查看上方失败的 agent，不影响已成功安装的部分和 CLI。'
+    if [[ "${WECHAT_USE_NO_TEST_MESSAGE:-0}" == 1 ]]; then return 1; fi
   else
     success 'wechat-use skill 已安装。'
   fi

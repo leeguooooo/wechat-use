@@ -16,3 +16,17 @@ MOCK_OUTPUT='Network error'
 output=$(install_agent_skill 2>&1)
 [[ "$output" == *'未安装成功'* && "$output" != *'✓'* ]]
 echo 'PASS: complete, partial-success exit 0, and failed skill installs have distinct results'
+
+# Upgrade mode must propagate both complete and partial refresh failures.
+export WECHAT_USE_NO_TEST_MESSAGE=1
+if install_agent_skill >/dev/null 2>&1; then echo 'FAIL: upgrade swallowed skill failure'; exit 1; fi
+MOCK_STATUS=0
+MOCK_OUTPUT='Failed to install 1'
+if install_agent_skill >/dev/null 2>&1; then echo 'FAIL: upgrade swallowed partial skill failure'; exit 1; fi
+MOCK_OUTPUT='Installation complete'
+install_agent_skill >/dev/null
+WECHAT_USE_INSTALL_SKILL=yes
+command() { return 1; }
+if offer_agent_skill_install >/dev/null 2>&1; then echo 'FAIL: upgrade ignored missing npx'; exit 1; fi
+unset -f command
+echo 'PASS: upgrade propagates missing npx, failed and partial skill refresh'

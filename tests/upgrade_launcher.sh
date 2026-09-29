@@ -74,7 +74,9 @@ mkdir -p "$HOME/.wx-rs/com_tencent_xinWeChat419WechatUse"
 touch "$HOME/.wx-rs/com_tencent_xinWeChat419WechatUse/config.json"
 maybe_smoke_send >/dev/null
 run_setup_step
-cat "$FAKE_LATEST_FILE" | sed 's/^v//' >"$FAKE_VERSION_FILE"
+if [[ "${FAKE_INSTALLER_NO_CHANGE:-0}" != 1 ]]; then
+  cat "$FAKE_LATEST_FILE" | sed 's/^v//' >"$FAKE_VERSION_FILE"
+fi
 INSTALLER
     ;;
   *) exit 22 ;;
@@ -299,6 +301,10 @@ echo 1.18.12 >"$FAKE_VERSION_FILE"; : >"$FAKE_LOG"
 run upgrade
 grep -q 'INSTALL_SKILL=no NO_TEST_MESSAGE=1' "$FAKE_LOG" || fail 'no skill -> INSTALL_SKILL=no'
 ! grep -q '^wechat send' "$FAKE_LOG" || fail 'upgrade must never send'
+# A zero exit from the installer is insufficient if the version did not change.
+echo 1.18.12 >"$FAKE_VERSION_FILE"
+FAKE_INSTALLER_NO_CHANGE=1 run upgrade
+[[ "$STATUS" == 1 && "$ERR" == *'expected 1.19.1 or newer'* ]] || fail "unchanged version: $STATUS $ERR"
 # Installer failure: exit 1, clear message.
 echo 1.18.12 >"$FAKE_VERSION_FILE"
 FAKE_INSTALLER_FAIL=1 run upgrade
