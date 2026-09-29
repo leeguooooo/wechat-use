@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 未发布
+
+- 修复 `doctor --paths` 在托管副本上误报 `query_ready=false`：数据库目录与密钥现在取自同一账号目录，和 daemon 一致。
+
 ## v1.18.14
 
 - 新增 `wechat-use upgrade`（`--check` / `--json`）：用安装器升级到最新 release；`--tag vX.Y.Z` 指定版本；skill 只在加 `--skills` 时刷新，默认只列出刷新命令。
