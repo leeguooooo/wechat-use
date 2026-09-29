@@ -154,6 +154,7 @@ wechat-use auth status                         # 第一行直接告诉你「剩�
 - [docs/capabilities.md](./docs/capabilities.md) — 完整能力矩阵 · [docs/install.md](./docs/install.md) — 详细安装 / TCC / 多账号 / LaunchAgent
 - [docs/troubleshooting.md](./docs/troubleshooting.md) — 热更 / 签名 / 0 hits 等 · [docs/CHANGELOG.md](./docs/CHANGELOG.md) / [docs/ROADMAP.md](./docs/ROADMAP.md)
 - 远程驱动两条路：[orchestrate](./docs/v1.12-orchestrate-protocol.md) / [remote-gateway](./docs/remote-gateway.md)
+- 维护者发版：`scripts/release.sh <version> <notes.md>`（跑测试、推 main、调私仓 `publish-release.sh` 上传资产，再同步插件市场）
 
 **深入原理**
 - [让微信在后台替你发消息，我曾经把它的数据库搞坏 —— 从「挂调试器」到「零附着」](https://blog.leeguoo.com/zh/posts/wechat-macos-noattach-send/) — 后台 send 为什么会弹「数据库已损坏」，以及怎么把 LLDB 断点写内存换成 `mach_vm_write` 全程不附着。
