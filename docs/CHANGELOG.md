@@ -1,6 +1,6 @@
 # CHANGELOG
 
-## 未发布
+## v1.18.14
 
 - 新增 `wechat-use upgrade`（`--check` / `--json`）：用安装器升级到最新 release；`--tag vX.Y.Z` 指定版本；skill 只在加 `--skills` 时刷新，默认只列出刷新命令。
 - 多开时 `send --pid` / `--bundle-id` 直接生效，不用先 `daemon stop`；无法区分实例时报 `multiple_wechat_instances` 并给出可用的 `--pid`。
