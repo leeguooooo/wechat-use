@@ -1,23 +1,79 @@
 ---
 name: wechat-use
-description: "macOS WeChat CLI + local HTTP bridge + Wechaty Puppet gRPC gateway — send messages, query sessions / contacts / chat history / images / favorites, and expose stable HTTP / gRPC surfaces for agent integration. Use when the user asks to 'send a WeChat message', '发微信', query WeChat contacts/groups/messages, look up who said what in a chat, fetch images from history, export chat history, wire WeChat into Hermes / n8n / Dify / LangChain, or run any wechaty bot on a real macOS WeChat account. Uses the installer-managed, isolated WeChat 4.1.9 clone on macOS (Apple Silicon) and a `wechatuse_` activation code. One-time `wechat-use init` extracts the DB key; no sudo, no re-signing WeChat.app. Optional remote bridge — `wechat-use tunnel setup --hostname YOUR_HOSTNAME` exposes the local REST API via Cloudflare Tunnel for remote services to call."
+description: "Use WeChat on macOS Apple Silicon or Windows x64: query sessions, contacts and history, listen for messages, and send authorized text. Select the host-specific backend first. Windows has a standalone experimental CLI/MCP package with no system Python requirement; macOS uses the managed WeChat 4.1.9 clone and supports HTTP Bridge/Wechaty."
 metadata:
   author: leeguooooo
-  version: "1.18.12"
-  platform: macOS-arm64
-  requires:
-    - macOS >= 14 (Apple Silicon)
-    - 独立微信 4.1.9 已启动并登录；由 install.sh 安装和默认绑定
-    - Xcode Command Line Tools (含 macOS 公开调试接口)
-    - Accessibility permission for `wechat-bridge` (macOS Sonoma+, only for `send`; Terminal itself does NOT need it)
-    - Activation code (wechatuse_…) from @WechatCliBot — subscribe the official Telegram channel first
+  version: "1.18.14"
+  platform: macOS-arm64, Windows-x64-experimental
 ---
 
-# wechat — macOS CLI
+# WechatUse — select the host platform first
+
+This skill supports **macOS Apple Silicon and experimental Windows x64**. Never tell a Windows user that WechatUse has no Windows version. Plugin/skill version 1.18.14 is metadata; the runtime releases are independently versioned (macOS v1.18.13, Windows windows-v0.1.0).
+
+- **Windows:** follow only the Windows section below. Do not apply macOS requirements, activation/setup commands, LLDB, Accessibility, shell installer or managed 4.1.9 instructions.
+- **macOS:** skip the Windows section and follow the macOS section.
+- Linux and Intel macOS do not have a supported native runtime.
+
+## Windows x64 (experimental)
+
+A standalone package is published at https://github.com/leeguooooo/wechat-use/releases/tag/windows-v0.1.0 . It includes its runtime; **do not install or invoke system Python** to use that package. The tested WeChat build is 4.0.6.17, with limited login compatibility; not every Windows WeChat build is supported. No media, background send, automatic chat selection, HTTP Bridge or Wechaty support is provided.
+
+### Find the installed runtime before reinstalling
+
+In PowerShell, first check `Get-Command wechat-use -ErrorAction SilentlyContinue`, then the default launcher:
+
+```powershell
+& "$env:LOCALAPPDATA\Programs\wechat-use\wechat-use.cmd" doctor
+```
+
+For custom installations, read the installed skill's `runtime.json`: `$CODEX_HOME\skills\wechat-use\runtime.json`, or `$env:USERPROFILE\.codex\skills\wechat-use\runtime.json` if CODEX_HOME is unset. The standalone installer writes `executable`, `args` and `mcp_args`; invoke that exact executable with PowerShell's `&` operator. Older source installations may instead record `python` and `script`; use those recorded absolute paths with `-X utf8`, never a guessed `python` command. The Claude plugin supplies instructions; installing/updating it alone does not install the runtime.
+
+If no runtime exists, download and run the official Windows installer:
+
+```powershell
+Invoke-WebRequest -UseBasicParsing https://raw.githubusercontent.com/leeguooooo/wechat-use/windows-v0.1.0/install-windows.ps1 -OutFile install-windows.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install-windows.ps1
+```
+
+The installer checks download hashes, installs a user-local CLI and Codex skill, and sends no messages. It does not require system Python. The package is not Authenticode-signed. See https://github.com/leeguooooo/wechat-use/blob/main/docs/windows.md for the supported scope.
+
+### Read, listen and send
+
+`doctor` checks local readiness, not delivery or current login acceptance. Discover the current process/account; never reuse a remembered PID or switch an initialized state directory to another account.
+
+```powershell
+wechat-use accounts
+wechat-use init --db-dir 'D:\WeChat\xwechat_files\ACCOUNT\db_storage' --pid 1234
+wechat-use sessions -n 20
+wechat-use contacts --query 'name'
+wechat-use history 'exact_username' -n 20
+wechat-use listen --once
+# Preflight only: open the intended chat in WeChat first
+wechat-use send filehelper 'specific text' --pid 1234
+# Only after recipient/content authorization; never blindly retry
+wechat-use send filehelper 'specific text' --pid 1234 --commit
+```
+
+History/search require exact usernames. Output is JSON (JSONL for listen); the first listener establishes a baseline unless `--from-start` is requested. Deduplicate by event_id and do not run concurrent listeners against one state directory. Keys are current-user DPAPI encrypted; never print or upload them.
+
+Foreground send requires the already-open unambiguous chat and an empty draft; it raises the selected WeChat window. Honor existing send authorization, but do not send unsolicited test messages. On uncertain submission, inspect history before any further action; a server-backed row is not a read receipt.
+
+For MCP use `runtime.json`'s `executable` and `mcp_args` (`["mcp"]`). A source installation instead uses its recorded `python` with `-X utf8 <script> mcp`. This supports wechat_sessions, wechat_contacts, wechat_history and experimental wechat_send; commit defaults to false.
+
+The old WeChat build can reject login. `compat-version --pid ...` only inspects by default; apply the explicit experimental `--apply` only when the user requests fixing that restriction. It is fingerprint-gated, changes one temporary field and saves a rollback journal; no promise of future login acceptance. The user performs QR/login confirmation.
+
+### Claude hook errors
+
+This plugin defines **no UserPromptSubmit hook**. A Python-not-found hook error belongs to a separately configured hook, not to the standalone WeChat runtime. Inspect the named hook in Claude settings before changing it; preserve unrelated hooks and do not disable all hooks or reinstall WeChat. A non-blocking hook error does not establish that the CLI is unavailable. If this platform section is absent from the loaded skill, update the marketplace/plugin and reload Claude.
+
+**End of Windows instructions. On Windows, do not execute the macOS section below.**
+
+# macOS only: stable CLI
 
 ## Setup failures and user reports (v1.18.7+)
 
-Release status: v1.18.7 is published and marked latest. The capabilities below apply to the released build; users on older versions can upgrade with the README install command.
+Release status: v1.18.13 is published; check GitHub Releases for subsequent versions. The capabilities below apply to the released build; users on older versions can upgrade with the README install command.
 
 Do not require users to identify their macOS version or whether this is a fresh install before helping. The setup window collects redacted environment and service facts automatically. Read the `WXS-…` problem code from an error screenshot; if more detail is needed, the user can click “复制诊断信息” on any setup page, including a waiting page. The window also provides a minimal report when core cannot start. Never request keys.json, activation tokens, raw memory output, or private chat data.
 
@@ -279,7 +335,7 @@ Correct flows for "给 XXX 发 YYY":
 | **WeChat binary fingerprint verification (v1.7.2+)** | ✅ | `wechat-use doctor` surfaces drift after WeChat hot-fix updates |
 | Send image / file | ⏳ roadmap | — |
 | Group broadcast | ❌ disallowed | anti-abuse; LICENSE forbids |
-| Linux / Windows / Intel Mac | ❌ | macOS arm64 only |
+| Linux / Intel Mac | ❌ | This macOS backend requires arm64; Windows uses the separate experimental backend above. |
 | unverified WeChat build | ⚠️ unverified | adaptation data may drift; `wechat-use doctor` flags it |
 
 ---

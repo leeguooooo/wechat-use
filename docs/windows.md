@@ -30,7 +30,7 @@ MCP 使用安装后 skill 目录 `runtime.json` 中的 `executable`，参数为 
 也可下载官方安装脚本后执行（PowerShell）：
 
 ```powershell
-Invoke-WebRequest -UseBasicParsing https://raw.githubusercontent.com/leeguooooo/wechat-use/main/install-windows.ps1 -OutFile install-windows.ps1
+Invoke-WebRequest -UseBasicParsing https://raw.githubusercontent.com/leeguooooo/wechat-use/windows-v0.1.0/install-windows.ps1 -OutFile install-windows.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File .\install-windows.ps1
 ```
 
