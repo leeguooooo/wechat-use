@@ -800,16 +800,17 @@ Before starting a session, the agent should check that `wechat` is reasonably cu
 wechat --version
 ```
 
-**Upgrade to latest (safe, idempotent)** — re-run `install.sh` with `--force`, or without it (it overwrites by default):
+**Upgrade to latest (safe, idempotent)** — `wechat-use upgrade` (see "## Upgrade" below). On a version without that command, re-run the installer:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/leeguooooo/wechat-use/main/install.sh | bash
 ```
 
-That pulls the latest tagged release binary from GitHub, re-installs to `~/.local/bin/wechat`, and re-clears any Gatekeeper quarantine attribute. No data is lost — `~/.wechat/keys.json` + `state.json` are untouched.
+Both pull the latest tagged release binary from GitHub, re-installs to `~/.local/bin/wechat`, and re-clears any Gatekeeper quarantine attribute. No data is lost — `~/.wechat/keys.json` + `state.json` are untouched.
 
 **When to upgrade**:
 
+- A `wechat-use` command printed `wechat-use X is available`, or `wechat-use upgrade --check` shows `current -> latest`
 - `wechat --version` is more than one minor behind the latest release tag at https://github.com/leeguooooo/wechat-use/releases
 - A command that the user asks for doesn't exist yet (the capability matrix on this page reflects the latest release; older binaries may be missing commands)
 - WeChat itself was updated — new versions may need a fresh `wechat` release to track adaptation data (watch https://github.com/leeguooooo/wechat-use/releases for a note)
@@ -842,6 +843,19 @@ npx skills update leeguooooo/wechat-use -g
 ```
 
 If the agent sees `wechat: command not found` after an `npx skills update`, it still needs to run `install.sh` — skill updates do **not** include the binary.
+
+## Upgrade
+
+The launcher command below is pending the next release that includes it. v1.18.13 and earlier still require the documented `install.sh` command to upgrade.
+
+When any `wechat-use` command prints `wechat-use X is available`, tell the user and offer to run
+`wechat-use upgrade` (it updates the CLI and this skill). Check without changing anything:
+`wechat-use upgrade --check`. The user may also just say "升级 wechat-use" / "upgrade wechat-use".
+This is unrelated to `wechat-use update-guard`, which blocks WeChat's own auto-update.
+
+If the skill came from somewhere `upgrade` can't refresh:
+- Claude Code plugin: `claude plugin update wechat-use@leeguooooo-plugins`
+- Whole family: `curl -fsSL https://raw.githubusercontent.com/leeguooooo/plugins/main/upgrade-use-family.sh | sh`
 
 ## Support
 

@@ -268,6 +268,11 @@ warn_if_wechat_lacks_get_task_allow() {
 # Skipped silently when prerequisites (init / auth / WeChat running)
 # aren't in place — this is a smoke test, not an init replacement.
 maybe_smoke_send() {
+  # `wechat-use upgrade` sets this: an upgrade must never send a message.
+  if [[ "${WECHAT_USE_NO_TEST_MESSAGE:-0}" == 1 ]]; then
+    info '升级模式：不发送测试消息。'
+    return 0
+  fi
   if [[ "${SERVICES_REUSED:-0}" == 1 ]]; then
     info '保留现有服务，跳过重复测试消息。'
     return 0
@@ -777,6 +782,7 @@ offer_agent_skill_install() {
   fi
   if ! command -v npx >/dev/null 2>&1; then
     info '可选：安装 Node.js 后，用 npx -y skills add leeguooooo/wechat-use -y -g 接入 AI agent。'
+    if [[ "${WECHAT_USE_NO_TEST_MESSAGE:-0}" == 1 && "$choice" == yes ]]; then return 1; fi
     return 0
   fi
   if [[ "$choice" == ask ]]; then
@@ -800,11 +806,64 @@ install_agent_skill() {
   # every selected agent succeeded.
   if [[ "$status" != 0 ]]; then
     warn 'skill 未安装成功，不影响 CLI；可稍后重试。'
+    if [[ "${WECHAT_USE_NO_TEST_MESSAGE:-0}" == 1 ]]; then return 1; fi
   elif printf '%s\n' "$output" | grep -q 'Failed to install'; then
     warn 'skill 仅部分安装成功；请查看上方失败的 agent，不影响已成功安装的部分和 CLI。'
+    if [[ "${WECHAT_USE_NO_TEST_MESSAGE:-0}" == 1 ]]; then return 1; fi
   else
     success 'wechat-use skill 已安装。'
   fi
+}
+
+# The launcher comes from the same release tag as the binaries, never from a
+# moving branch. Releases that predate it keep the plain symlink.
+fetch_wechat_use_launcher() {
+  local destination="$1"
+  curl -fsSL --connect-timeout 20 --max-time 60 --proto '=https' --proto-redir '=https' \
+    "https://raw.githubusercontent.com/${REPO}/${LATEST_TAG}/scripts/wechat-use" -o "$destination" 2>/dev/null
+}
+
+wechat_use_launcher_is_valid() {
+  [[ -s "$1" && ! -L "$1" ]] && bash -n "$1" 2>/dev/null &&
+    grep -Fqx '# wechat-use — command launcher installed by install.sh as $INSTALL_DIR/wechat-use.' "$1"
+}
+
+link_wechat_use_alias() {
+  local link="$1"
+  if [[ -L "$link" && "$(readlink "$link")" == wechat ]]; then
+    info 'wechat-use 命令别名已就绪。'
+    return 0
+  fi
+  install_destination_command "$INSTALL_DIR" rm -f "$link"
+  install_destination_command "$INSTALL_DIR" ln -s wechat "$link"
+  success "已建立别名:${link} → wechat（wechat-use 与 wechat 等价）"
+}
+
+install_wechat_use_command() {
+  local link="${INSTALL_DIR}/wechat-use" launcher="${STAGE}/wechat-use"
+  if ! fetch_wechat_use_launcher "$launcher" || ! wechat_use_launcher_is_valid "$launcher"; then
+    link_wechat_use_alias "$link"
+    return 0
+  fi
+  if installed_binary_matches_staged "$launcher" "$link"; then
+    info 'wechat-use 命令已是当前版本。'
+    return 0
+  fi
+  # A symlink is replaced by a regular file; mv over it keeps the swap atomic.
+  if install_binary_atomically "$launcher" "$link"; then
+    success "已安装 ${link}（wechat-use upgrade 升级；其余命令等同 wechat）"
+  else
+    warn 'wechat-use 启动脚本安装失败，保留命令别名。'
+    link_wechat_use_alias "$link"
+  fi
+}
+
+# Final setup step. WECHAT_USE_NO_TEST_MESSAGE=1 (set by `wechat-use upgrade`)
+# keeps service, permission and clone preparation but skips the test message.
+run_setup_step() {
+  local -a args=(setup)
+  [[ "${WECHAT_USE_NO_TEST_MESSAGE:-0}" == 1 ]] && args+=(--skip-verify)
+  "$INSTALL_DIR/wechat" "${args[@]}"
 }
 
 open_permission_windows() {
@@ -1395,19 +1454,10 @@ done
 echo ""
 
 # wechat-use 是新的主命令名（与 profile-use / iphone-use / chrome-use 同系列）。
-# 实际二进制仍叫 `wechat`，这里建一个 `wechat-use` → `wechat` 软链，两个名字等价。
-# 旧脚本 / 文档里的 `wechat ...` 继续可用，新文档统一用 `wechat-use ...`。
-WECHAT_USE_LINK="${INSTALL_DIR}/wechat-use"
-if [[ -L "$WECHAT_USE_LINK" && "$(readlink "$WECHAT_USE_LINK")" == wechat ]]; then
-  info 'wechat-use 命令别名已就绪。'
-elif [[ -w "${INSTALL_DIR}" ]]; then
-  rm -f "${WECHAT_USE_LINK}"
-  ln -s wechat "${WECHAT_USE_LINK}"
-else
-  sudo rm -f "${WECHAT_USE_LINK}"
-  sudo ln -s wechat "${WECHAT_USE_LINK}"
-fi
-success "已建立别名:${WECHAT_USE_LINK} → wechat（wechat-use 与 wechat 等价）"
+# 实际二进制仍叫 `wechat`。wechat-use 是同版本 tag 下的 scripts/wechat-use 启动脚本：
+# 增加 `wechat-use upgrade` 和每日新版本提示（stderr），其余命令原样交给 `wechat`。
+# 旧 release 没有该脚本时退回 `wechat-use` → `wechat` 软链，两个名字等价。
+install_wechat_use_command
 echo ""
 
 # v1.16.4 REVERT: cleanup remnants of the v1.16.0–v1.16.3 .app bundle
@@ -1686,7 +1736,7 @@ esac
 # to reactivate/reinitialize merely because they ran the installer again.
 if [[ "${SETUP_WINDOW_AVAILABLE:-0}" == 1 ]]; then
   if [[ "${WECHAT_SETUP_DEFER:-0}" != 1 ]]; then
-    "$INSTALL_DIR/wechat" setup || { warn '设置尚未完成，稍后打开“微信工具设置”即可继续，已有数据保留。'; exit 1; }
+    run_setup_step || { warn '设置尚未完成，稍后打开“微信工具设置”即可继续，已有数据保留。'; exit 1; }
   fi
   success '安装完成；后续可从“微信工具设置”继续检查或恢复。'
   if [[ "${WECHAT_USE_INSTALL_SKILL:-no}" == yes ]]; then offer_agent_skill_install; fi

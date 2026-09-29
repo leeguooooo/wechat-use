@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 未发布
+
+- 新增 `wechat-use upgrade`（`--check` / `--json`）：用安装器升级到最新 release，并刷新 Claude Code 插件、git 检出或安装器管理的 skill。
+- `wechat-use` 每 24 小时最多查一次新版本，有新版本时在 stderr 打印一行提示；`CI`、`WECHAT_USE_NO_UPDATE_CHECK`、`USE_NO_UPDATE_CHECK` 可关闭。
+- `wechat-use` 由软链改为同版本 tag 的启动脚本 `scripts/wechat-use`，其他命令原样交给 `wechat`；旧 release 仍安装软链。
+
+## v1.18.13
+
+- 普通文本连续发送默认复用后台工作进程，减少重复准备；提交状态不明时不会自动重发。
+- 适配服务异常和导航中断显示明确原因。
+- 已验证 macOS 26.6.2 + LLDB 2103 的实发及异常恢复；macOS 27 尚未现场验收。
+
 ## v1.18.12
 
 - 设置验证失败时显示已识别的具体原因，不再统一只提示“未确认送达”。
