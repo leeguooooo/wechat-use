@@ -2,7 +2,10 @@
 
 ## 未发布
 
-- 新增 `wechat-use upgrade`（`--check` / `--json`）：用安装器升级到最新 release，并刷新 Claude Code 插件、git 检出或安装器管理的 skill。
+- 新增 `wechat-use upgrade`（`--check` / `--json`）：用安装器升级到最新 release；`--tag vX.Y.Z` 指定版本；skill 只在加 `--skills` 时刷新，默认只列出刷新命令。
+- 多开时 `send --pid` / `--bundle-id` 直接生效，不用先 `daemon stop`；无法区分实例时报 `multiple_wechat_instances` 并给出可用的 `--pid`。
+- daemon 在运行但响应超时时报 `daemon busy`（可重试），不再误报 `daemon unavailable`。
+- `doctor` 实际尝试解密数据库，密钥不可用时 `query_ready=false`。
 - `wechat-use` 每 24 小时最多查一次新版本，有新版本时在 stderr 打印一行提示；`CI`、`WECHAT_USE_NO_UPDATE_CHECK`、`USE_NO_UPDATE_CHECK` 可关闭。
 - `wechat-use` 由软链改为同版本 tag 的启动脚本 `scripts/wechat-use`，其他命令原样交给 `wechat`；旧 release 仍安装软链。
 
