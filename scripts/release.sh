@@ -28,14 +28,19 @@ echo "$V" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || die "version must look like 1
 git fetch -q origin main
 [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] || die "main is not in sync with origin/main"
 [ -z "$(git ls-remote --tags origin "refs/tags/v$V")" ] || die "v$V already exists"
+# The Claude Code plugin updates only when .claude-plugin/plugin.json's version goes up, so the release carries it along.
+PV=$(python3 -c "import json; print(json.load(open('.claude-plugin/plugin.json'))['version'])")
+python3 -c "import sys; t=lambda v: tuple(map(int, v.split('.'))); sys.exit(t('$V') <= t('$PV'))" \
+  || die "plugin.json is already at $PV; release a higher version than that"
 if [ -z "$DRY" ]; then
   [ -f "$NOTES" ] || die "release notes file required (<= 8 non-blank lines, publish-release.sh enforces it)"
   NOTES=$(cd "$(dirname "$NOTES")" && pwd)/$(basename "$NOTES")
   [ -x "$PRIV/scripts/publish-release.sh" ] || die "no $PRIV/scripts/publish-release.sh (set WECHAT_PRIVATE_DIR)"
 fi
 
-trap 'git checkout -q -- docs/CHANGELOG.md' EXIT
+trap 'git checkout -q -- docs/CHANGELOG.md .claude-plugin/plugin.json' EXIT
 sed -i.bak "s/^## 未发布\$/## v$V/" docs/CHANGELOG.md && rm docs/CHANGELOG.md.bak
+sed -i.bak "s/\"version\": \"$PV\"/\"version\": \"$V\"/" .claude-plugin/plugin.json && rm .claude-plugin/plugin.json.bak
 bash -n install.sh && sh -n scripts/wechat-use
 for t in tests/*.sh; do bash "$t" >/dev/null || die "$t failed"; done
 node --experimental-vm-modules --test sdk/node/bridge.test.mjs examples/lib/*.test.mjs >/dev/null || die "node tests failed"
