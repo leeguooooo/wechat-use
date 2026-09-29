@@ -188,3 +188,9 @@ to teach your agent, JSON on stdout.
 | [chatgpt-use](https://github.com/leeguooooo/chatgpt-use) | Your ChatGPT subscription as a coding-agent backend — no API key |
 | [computer-use](https://github.com/leeguooooo/computer-use) | The macOS desktop itself |
 | [pixcake-use](https://github.com/leeguooooo/pixcake-use) | Read-only PixCake probing — snapshot / diff / SQLite inspection |
+
+## Windows x64 实验版
+
+Windows 使用独立安装包，自带运行时，无需 Python。支持数据库查询、监听、stdio MCP 和已打开聊天的前台文本发送；目前仅有微信 4.0.6.17 的有限验收，登录兼容性仍有实验限制，不等同于 macOS 完整功能。
+
+下载 [Windows 实验版](https://github.com/leeguooooo/wechat-use/releases/tag/windows-v0.1.0)，解压后运行 `powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1`。安装器验证包内哈希，并安装 CLI 和 Codex skill，不自动发送消息。详见 [Windows 安装与限制](docs/windows.md)。
