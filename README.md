@@ -195,3 +195,7 @@ to teach your agent, JSON on stdout.
 Windows 使用独立安装包，自带运行时，无需 Python。支持数据库查询、监听、stdio MCP 和已打开聊天的前台文本发送；目前仅有微信 4.0.6.17 的有限验收，登录兼容性仍有实验限制，不等同于 macOS 完整功能。
 
 下载 [Windows 实验版](https://github.com/leeguooooo/wechat-use/releases/tag/windows-v0.1.0)，解压后运行 `powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1`。安装器验证包内哈希，并安装 CLI 和 Codex skill，不自动发送消息。详见 [Windows 安装与限制](docs/windows.md)。
+
+## Author
+
+Built by **郭立 (Guo Li / leeguoo)** — [leeguoo.com](https://leeguoo.com/about) · [GitHub](https://github.com/leeguooooo) · [X](https://x.com/leeguooooo) · more tools in the [*-use family](https://github.com/leeguooooo/plugins).
