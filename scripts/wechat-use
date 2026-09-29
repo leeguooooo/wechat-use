@@ -3,7 +3,7 @@
 #
 # The real CLI is the `wechat` binary next to this file. This launcher adds the
 # *-use family upgrade convention (https://github.com/leeguooooo/plugins/blob/main/docs/upgrade.md):
-#   wechat-use upgrade [--check] [--json]
+#   wechat-use upgrade [--check] [--json] [--skills] [--tag vX.Y.Z]
 #   a once-a-day "new version" notice on stderr
 # and hands every other invocation to `wechat` unchanged (exec, same args,
 # same stdin/stdout/exit code). `wechat update-guard` (WeChat's own auto-update
@@ -64,11 +64,12 @@ wu_version_gt() {
 }
 
 # Newest non-prerelease release tag without the "v", or non-zero on any failure.
+# $2 (optional) is another release API URL, e.g. .../releases/tags/v1.2.3.
 wu_fetch_latest() {
-  local timeout="$1" body tag
+  local timeout="$1" url="${2:-$WU_API_URL}" body tag
   local -a headers=(-H 'Accept: application/vnd.github+json')
   [[ -n "${GITHUB_TOKEN:-}" ]] && headers+=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
-  body=$(curl -fsSL --connect-timeout "$timeout" --max-time "$timeout" "${headers[@]}" "$WU_API_URL" 2>/dev/null) || return 1
+  body=$(curl -fsSL --connect-timeout "$timeout" --max-time "$timeout" "${headers[@]}" "$url" 2>/dev/null) || return 1
   tag=$(printf '%s\n' "$body" | sed -nE 's/^[[:space:]]*"tag_name"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/p' | head -n 1)
   tag=${tag#v}
   [[ "$tag" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || return 1
@@ -148,9 +149,53 @@ wu_maybe_notice() {
   return 0
 }
 
+# ---------- install channel ----------
+# Only an installer-managed CLI (this launcher next to a real `wechat` binary,
+# as install.sh lays them out) is upgraded in place. Anything else belongs to
+# whoever installed it, so `upgrade` refuses and says what to run instead.
+WU_CHANNEL="" WU_CHANNEL_PATH="" WU_CHANNEL_HINT=""
+
+wu_realpath() {
+  local target="$1" dir
+  while [[ -L "$target" ]]; do
+    dir=$(cd -P "$(dirname "$target")" 2>/dev/null && pwd) || return 1
+    target=$(readlink "$target")
+    [[ "$target" == /* ]] || target="$dir/$target"
+  done
+  dir=$(cd -P "$(dirname "$target")" 2>/dev/null && pwd) || return 1
+  printf '%s/%s\n' "$dir" "${target##*/}"
+}
+
+wu_detect_channel() {
+  local real self
+  real=$(wu_realpath "$WU_BIN" 2>/dev/null) || real="$WU_BIN"
+  self=$(wu_self_dir 2>/dev/null) || self=""
+  WU_CHANNEL_PATH="$real"
+  case "$real" in
+    */Cellar/*|*/Caskroom/*)
+      WU_CHANNEL=brew
+      WU_CHANNEL_HINT="installed by Homebrew; upgrade with: brew upgrade wechat-use" ;;
+    */node_modules/*)
+      WU_CHANNEL=npm
+      WU_CHANNEL_HINT="installed by an npm global package; upgrade with npm, or reinstall with: curl -fsSL $WU_INSTALLER_URL | bash" ;;
+    */target/debug/*|*/target/release/*)
+      WU_CHANNEL=source
+      WU_CHANNEL_HINT="a source build; pull the checkout and rebuild" ;;
+    *)
+      if [[ -f "$real" && -n "$self" && "${real%/*}" == "$self" ]]; then
+        WU_CHANNEL=installer
+        WU_CHANNEL_HINT="install.sh in ${self}"
+      else
+        WU_CHANNEL=unknown
+        WU_CHANNEL_HINT="$real is not next to this launcher ($self); reinstall with: curl -fsSL $WU_INSTALLER_URL | bash"
+      fi ;;
+  esac
+}
+
 # ---------- skill discovery (docs/upgrade.md section 3) ----------
 
-WU_SKILLS=()  # entries: channel<TAB>path<TAB>update
+WU_SKILLS=()  # entries: channel<TAB>path<TAB>update<TAB>agent<TAB>source
+WU_SKILL_ADD="npx -y skills add ${WU_REPO} -y -g"
 
 wu_json_escape() {
   local s="$1"
@@ -158,11 +203,20 @@ wu_json_escape() {
   printf '%s' "$s"
 }
 
+# ~/.claude/skills -> claude-code, ~/.codex/skills -> codex, ~/.agents/skills -> agents
+wu_skill_agent() {
+  case "$1" in
+    "$HOME/.claude/"*) printf 'claude-code' ;;
+    "$HOME/.codex/"*) printf 'codex' ;;
+    *) printf 'agents' ;;
+  esac
+}
+
 wu_discover_skills() {
   WU_SKILLS=()
-  local plugins="$HOME/.claude/plugins/installed_plugins.json" candidate real root seen=$'\n'
+  local plugins="$HOME/.claude/plugins/installed_plugins.json" candidate real root remote seen=$'\n'
   if [[ -f "$plugins" ]] && grep -q "\"${WU_NAME}@" "$plugins" 2>/dev/null; then
-    WU_SKILLS+=("claude-plugin"$'\t'"$plugins"$'\t'"claude plugin update ${WU_PLUGIN_ID}")
+    WU_SKILLS+=("claude-plugin"$'\t'"$plugins"$'\t'"claude plugin update ${WU_PLUGIN_ID}"$'\t'"claude-code"$'\t'"${WU_PLUGIN_ID}")
   fi
   for candidate in "$HOME/.agents/skills/$WU_NAME" "$HOME/.claude/skills/$WU_NAME" "$HOME/.codex/skills/$WU_NAME"; do
     [[ -d "$candidate" ]] || continue
@@ -173,11 +227,12 @@ wu_discover_skills() {
     # Only a checkout of the skill itself counts; never pull an enclosing repo
     # such as a dotfiles-managed $HOME.
     if [[ -n "$root" && "$(cd -P "$root" && pwd)" == "$real" ]]; then
-      WU_SKILLS+=("git"$'\t'"$real"$'\t'"git -C $real pull --ff-only")
+      remote=$(git -C "$real" remote get-url origin 2>/dev/null || true)
+      WU_SKILLS+=("git"$'\t'"$real"$'\t'"git -C $real pull --ff-only"$'\t'"$(wu_skill_agent "$candidate")"$'\t'"${remote:-git}")
     elif [[ -f "$real/SKILL.md" ]]; then
-      # wechat-use's installer owns copied skill folders (npx skills add):
-      # the installer run by `wechat-use upgrade` refreshes them.
-      WU_SKILLS+=("installer"$'\t'"$real"$'\t'"${WU_NAME} upgrade")
+      # A copied folder (npx skills add). The installer re-copies it when it
+      # runs with WECHAT_USE_INSTALL_SKILL=yes (`upgrade --skills`).
+      WU_SKILLS+=("installer"$'\t'"$real"$'\t'"$WU_SKILL_ADD"$'\t'"$(wu_skill_agent "$candidate")"$'\t'"$WU_REPO")
     fi
   done
 }
@@ -190,57 +245,70 @@ wu_has_skill_channel() {
   return 1
 }
 
+# Splits one WU_SKILLS entry into SK_CHANNEL SK_PATH SK_UPDATE SK_AGENT SK_SOURCE.
+wu_skill_fields() {
+  IFS=$'\t' read -r SK_CHANNEL SK_PATH SK_UPDATE SK_AGENT SK_SOURCE <<<"$1"
+}
+
 wu_print_json() {
-  local current="$1" latest="$2" available=false entry channel rest path update first=1
+  local current="$1" latest="$2" target="$3" available=false entry first=1 upgradable=false
   wu_version_gt "$latest" "$current" && available=true
-  printf '{\n  "name": "%s",\n  "current": "%s",\n  "latest": "%s",\n  "update_available": %s,\n  "skills": [' \
+  [[ "$WU_CHANNEL" == installer ]] && upgradable=true
+  printf '{\n  "name": "%s",\n  "current": "%s",\n  "latest": "%s",\n  "update_available": %s,\n' \
     "$WU_NAME" "$(wu_json_escape "$current")" "$(wu_json_escape "$latest")" "$available"
+  [[ -n "$target" ]] && printf '  "target": "%s",\n' "$(wu_json_escape "$target")"
+  printf '  "install_channel": {"channel": "%s", "path": "%s", "upgradable": %s, "hint": "%s"},\n  "skills": [' \
+    "$WU_CHANNEL" "$(wu_json_escape "$WU_CHANNEL_PATH")" "$upgradable" "$(wu_json_escape "$WU_CHANNEL_HINT")"
   for entry in "${WU_SKILLS[@]+"${WU_SKILLS[@]}"}"; do
-    channel=${entry%%$'\t'*}; rest=${entry#*$'\t'}; path=${rest%%$'\t'*}; update=${rest#*$'\t'}
+    wu_skill_fields "$entry"
     [[ "$first" == 1 ]] && printf '\n' || printf ',\n'
     first=0
-    printf '    {"channel": "%s", "path": "%s", "update": "%s"}' \
-      "$(wu_json_escape "$channel")" "$(wu_json_escape "$path")" "$(wu_json_escape "$update")"
+    printf '    {"channel": "%s", "path": "%s", "update": "%s", "agent": "%s", "scope": "user", "source": "%s"}' \
+      "$(wu_json_escape "$SK_CHANNEL")" "$(wu_json_escape "$SK_PATH")" "$(wu_json_escape "$SK_UPDATE")" \
+      "$(wu_json_escape "$SK_AGENT")" "$(wu_json_escape "$SK_SOURCE")"
   done
   [[ "$first" == 1 ]] && printf ']\n}\n' || printf '\n  ]\n}\n'
 }
 
+# One line per skill copy, without touching it.
 wu_print_skills() {
-  local entry channel rest path update
+  local suffix="${1:-}" entry
   for entry in "${WU_SKILLS[@]+"${WU_SKILLS[@]}"}"; do
-    channel=${entry%%$'\t'*}; rest=${entry#*$'\t'}; path=${rest%%$'\t'*}; update=${rest#*$'\t'}
-    printf 'skill (%s): %s — update: %s\n' "$channel" "$path" "$update"
+    wu_skill_fields "$entry"
+    printf 'skill (%s, %s, user scope, from %s): %s — %supdate: %s\n' \
+      "$SK_CHANNEL" "$SK_AGENT" "$SK_SOURCE" "$SK_PATH" "$suffix" "$SK_UPDATE"
   done
 }
 
-# Refresh plugin / git skills. Installer-managed folders are refreshed by the
-# installer itself (WECHAT_USE_INSTALL_SKILL=yes), so only when it ran ($1=1).
+# `upgrade --skills`: refresh only wechat-use's own copies. Installer-managed
+# folders are re-copied by the installer itself (WECHAT_USE_INSTALL_SKILL=yes),
+# so only when it ran ($1=1); otherwise print the scoped command.
 wu_refresh_skills() {
-  local installer_ran="${1:-0}" entry channel rest path failed=0
+  local installer_ran="${1:-0}" entry failed=0
   for entry in "${WU_SKILLS[@]+"${WU_SKILLS[@]}"}"; do
-    channel=${entry%%$'\t'*}; rest=${entry#*$'\t'}; path=${rest%%$'\t'*}
-    case "$channel" in
+    wu_skill_fields "$entry"
+    case "$SK_CHANNEL" in
       claude-plugin)
         if command -v claude >/dev/null 2>&1; then
-          printf 'skill (claude-plugin): claude plugin update %s\n' "$WU_PLUGIN_ID"
+          printf 'skill (claude-plugin, claude-code): claude plugin update %s\n' "$WU_PLUGIN_ID"
           claude plugin update "$WU_PLUGIN_ID" || { printf 'skill (claude-plugin): update failed; run it yourself: claude plugin update %s\n' "$WU_PLUGIN_ID" >&2; failed=1; }
         else
-          printf 'skill (claude-plugin): claude is not on PATH; run: claude plugin update %s\n' "$WU_PLUGIN_ID"
+          printf 'skill (claude-plugin, claude-code): claude is not on PATH; run: claude plugin update %s\n' "$WU_PLUGIN_ID"
         fi ;;
       git)
-        if git -C "$path" pull --ff-only; then
-          printf 'skill (git): %s updated\n' "$path"
+        if git -C "$SK_PATH" pull --ff-only; then
+          printf 'skill (git, %s): %s updated from %s\n' "$SK_AGENT" "$SK_PATH" "$SK_SOURCE"
         else
-          printf 'skill (git): %s not updated (local changes or diverged?); not forcing\n' "$path" >&2
+          printf 'skill (git, %s): %s not updated (local changes or diverged?); not forcing\n' "$SK_AGENT" "$SK_PATH" >&2
           failed=1
         fi ;;
       installer)
         if [[ "$installer_ran" == 1 ]]; then
-          printf 'skill (installer): %s refreshed by the installer\n' "$path"
+          printf 'skill (installer, %s): %s refreshed by the installer from %s\n' "$SK_AGENT" "$SK_PATH" "$SK_SOURCE"
         else
-          # The CLI is current, so the installer did not run; copied folders
-          # are not re-copied behind the user's back (docs/upgrade.md).
-          printf 'skill (installer): %s not refreshed (CLI already current); to re-copy it: npx -y skills add %s -y -g\n' "$path" "$WU_REPO"
+          # The installer did not run; copied folders are not re-copied behind
+          # the user's back (docs/upgrade.md) and no broad `skills update` runs.
+          printf 'skill (installer, %s): %s not refreshed (CLI already current); to re-copy only this skill: %s\n' "$SK_AGENT" "$SK_PATH" "$WU_SKILL_ADD"
         fi ;;
     esac
   done
@@ -249,32 +317,55 @@ wu_refresh_skills() {
 
 wu_upgrade_usage() {
   cat <<'EOF'
-Usage: wechat-use upgrade [--check] [--json]
+Usage: wechat-use upgrade [--check] [--json] [--skills] [--tag vX.Y.Z]
 
-Upgrade the wechat-use CLI to the latest GitHub release through its installer,
-then refresh the wechat-use skill (Claude Code plugin, git checkout, or the
-installer-managed skill folder).
+Upgrade the wechat-use CLI to the latest GitHub release through its installer
+(install.sh: SHA-256 verified, atomic replace, existing data and login kept,
+no test message sent). Skill copies are listed but left alone unless --skills.
 
-  --check   change nothing; print "wechat-use <current> -> <latest>" or "is up to date"
-  --json    like --check, as JSON
-  -h        this help
+  --check         change nothing; print "wechat-use <current> -> <latest>" or "is up to date"
+  --json          like --check, as JSON (adds install_channel and skill copies)
+  --skills        also refresh this tool's own skill copies (Claude Code plugin,
+                  git checkout, installer-managed folder); with the CLI already
+                  current this refreshes only the skill
+  --tag vX.Y.Z    install exactly this release (the only way to downgrade)
+  -h              this help
+
+Only an installer-managed CLI is replaced; a Homebrew, npm or source install is
+refused with the command to use instead.
 
 Exit codes: 0 success (upgraded, current, or a check that ran); 2 the check or download failed;
-1 the upgrade did not finish: the installer stopped, or a skill could not be refreshed
-(the messages above say which).
+1 the upgrade did not finish or was refused: the installer stopped, the CLI is not
+installer-managed, or a skill could not be refreshed (the messages above say which).
 EOF
 }
 
+# launchctl state of the bridge LaunchAgent: loaded / not-loaded.
+wu_bridge_state() {
+  if launchctl print "gui/$(id -u)/ai.wechat.bridge" >/dev/null 2>&1; then printf 'loaded'; else printf 'not-loaded'; fi
+}
+
 wu_upgrade() {
-  local mode=upgrade arg current latest
-  for arg in "$@"; do
+  local mode=upgrade skills=0 tag="" target="" current latest arg
+  while [[ $# -gt 0 ]]; do
+    arg="$1"; shift
     case "$arg" in
       --check) [[ "$mode" == json ]] || mode=check ;;
       --json) mode=json ;;
+      --skills) skills=1 ;;
+      --tag) [[ $# -gt 0 ]] || { printf 'wechat-use upgrade: --tag needs a version\n' >&2; return 2; }; tag="$1"; shift ;;
+      --tag=*) tag="${arg#--tag=}" ;;
       -h|--help) wu_upgrade_usage; return 0 ;;
       *) printf 'wechat-use upgrade: unknown option %s\n' "$arg" >&2; wu_upgrade_usage >&2; return 2 ;;
     esac
   done
+  if [[ -n "$tag" ]]; then
+    target="${tag#v}"
+    if [[ ! "$target" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+      printf 'wechat-use upgrade: --tag must look like v1.2.3 (got %s)\n' "$tag" >&2
+      return 2
+    fi
+  fi
   if ! current=$(wu_current_version); then
     printf 'wechat-use upgrade: cannot run %s --version; reinstall with:\n  curl -fsSL %s | bash\n' "$WU_BIN" "$WU_INSTALLER_URL" >&2
     return 2
@@ -284,28 +375,47 @@ wu_upgrade() {
     return 2
   fi
   wu_write_cache "$(wu_now)" "$latest" || true
+  if [[ -n "$target" ]] && ! wu_fetch_latest 10 "${WU_API_URL%/latest}/tags/v${target}" >/dev/null; then
+    printf 'wechat-use upgrade: release v%s not found on GitHub\n' "$target" >&2
+    return 2
+  fi
+  wu_detect_channel
   wu_discover_skills
 
+  # What would be installed: the pinned tag, else the latest when newer.
+  local want="" desc
+  if [[ -n "$target" ]]; then
+    [[ "$target" != "$current" ]] && want="$target"
+  elif wu_version_gt "$latest" "$current"; then
+    want="$latest"
+  fi
+
   case "$mode" in
-    json) wu_print_json "$current" "$latest"; return 0 ;;
+    json) wu_print_json "$current" "$latest" "$target"; return 0 ;;
     check)
-      if wu_version_gt "$latest" "$current"; then
-        printf '%s %s -> %s\n' "$WU_NAME" "$current" "$latest"
-      else
-        printf '%s %s is up to date\n' "$WU_NAME" "$current"
-      fi
+      if [[ -n "$want" ]]; then printf '%s %s -> %s\n' "$WU_NAME" "$current" "$want"
+      else printf '%s %s is up to date\n' "$WU_NAME" "$current"; fi
+      [[ "$WU_CHANNEL" == installer ]] || printf 'install: %s — %s\n' "$WU_CHANNEL" "$WU_CHANNEL_HINT"
       wu_print_skills
       return 0 ;;
   esac
 
-  if ! wu_version_gt "$latest" "$current"; then
+  if [[ -z "$want" ]]; then
     printf '%s %s is up to date\n' "$WU_NAME" "$current"
-    wu_refresh_skills 0 || return 1
+    if [[ "$skills" == 1 ]]; then wu_refresh_skills 0 || return 1
+    else wu_print_skills 'not refreshed; pass --skills or '; fi
     return 0
   fi
 
-  printf '%s %s -> %s: running the installer\n' "$WU_NAME" "$current" "$latest"
-  local stage installer status=0 skill_choice=no install_dir
+  if [[ "$WU_CHANNEL" != installer ]]; then
+    printf 'wechat-use upgrade: not upgrading %s: %s\n' "$WU_CHANNEL_PATH" "$WU_CHANNEL_HINT" >&2
+    return 1
+  fi
+
+  desc="$want"
+  [[ -n "$target" ]] && desc="v$target (pinned)"
+  printf '%s %s -> %s: running the installer\n' "$WU_NAME" "$current" "$desc"
+  local stage installer status=0 skill_choice=no install_dir bridge_before bridge_after
   stage=$(mktemp -d "${TMPDIR:-/tmp}/wechat-use-upgrade.XXXXXX") || return 2
   installer="$stage/install.sh"
   if ! curl -fsSL --connect-timeout 20 --max-time 120 --proto '=https' --proto-redir '=https' \
@@ -314,16 +424,20 @@ wu_upgrade() {
     printf 'wechat-use upgrade: could not download the installer (%s)\n' "$WU_INSTALLER_URL" >&2
     return 2
   fi
-  wu_has_skill_channel installer && skill_choice=yes
+  [[ "$skills" == 1 ]] && wu_has_skill_channel installer && skill_choice=yes
   install_dir=$(dirname "$WU_BIN")
+  bridge_before=$(wu_bridge_state)
   # Same route as the README install command. Nothing in it needs an answer:
   # the 4.1.9 clone choice is fixed to yes, the skill question is answered by
-  # WECHAT_USE_INSTALL_SKILL (yes only when an installer-managed skill exists),
-  # and the permission guide only appears when macOS permission is missing.
+  # WECHAT_USE_INSTALL_SKILL (yes only with --skills and an installer-managed
+  # skill), and the permission guide only appears when macOS permission is missing.
   # WECHAT_USE_NO_TEST_MESSAGE=1: an upgrade never sends a WeChat message
   # (setup runs with --skip-verify; the legacy filehelper smoke send is skipped).
+  # The installer verifies SHA256SUMS and swaps each binary atomically; on any
+  # failure before the swap the installed CLI is left as it was.
   INSTALL_DIR="$install_dir" WECHAT_USE_PREFER_419="${WECHAT_USE_PREFER_419:-yes}" \
     WECHAT_USE_INSTALL_SKILL="$skill_choice" WECHAT_USE_NO_TEST_MESSAGE=1 \
+    WECHAT_USE_VERSION="${target:+v$target}" \
     bash "$installer" || status=$?
   rm -rf -- "$stage"
   if [[ "$status" != 0 ]]; then
@@ -332,13 +446,20 @@ wu_upgrade() {
   fi
   local after
   after=$(wu_current_version) || after="?"
-  if [[ ! "$after" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || wu_version_gt "$latest" "$after"; then
-    printf 'wechat-use upgrade: installer finished but CLI is %s; expected %s or newer\n' "$after" "$latest" >&2
+  if [[ ! "$after" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+      { [[ -n "$target" ]] && [[ "$after" != "$target" ]]; } ||
+      { [[ -z "$target" ]] && wu_version_gt "$latest" "$after"; }; then
+    printf 'wechat-use upgrade: installer finished but CLI is %s; expected %s\n' "$after" "${target:-$latest or newer}" >&2
     return 1
   fi
   wu_write_cache "$(wu_now)" "$latest" || true
   printf '%s %s -> %s\n' "$WU_NAME" "$current" "$after"
-  wu_refresh_skills 1 || return 1
+  bridge_after=$(wu_bridge_state)
+  if [[ "$bridge_before" == not-loaded && "$bridge_after" == loaded ]]; then
+    printf 'note: the background service (ai.wechat.bridge) was not loaded before the upgrade and the installer started it.\n  to stop it again: launchctl bootout gui/%s/ai.wechat.bridge\n' "$(id -u)"
+  fi
+  if [[ "$skills" == 1 ]]; then wu_refresh_skills 1 || return 1
+  else wu_print_skills 'not refreshed; pass --skills or '; fi
   return 0
 }
 
@@ -349,7 +470,7 @@ wu_help() {
   out=$("$WU_BIN" "$@" 2>&1) || status=$?
   printf '%s\n' "$out" | awk '
     { print }
-    /^Commands:/ && !done { print "  upgrade             升级 wechat-use CLI 与 skill（--check 只检查，--json 输出 JSON）"; done = 1 }'
+    /^Commands:/ && !done { print "  upgrade             升级 wechat-use CLI（--check 只检查，--json 输出 JSON，--skills 同时刷新 skill，--tag 指定版本）"; done = 1 }'
   return "$status"
 }
 

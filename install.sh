@@ -3,6 +3,8 @@
 #
 # Default: install to ~/.local/bin (no sudo). Override with INSTALL_DIR.
 # Example: INSTALL_DIR=/usr/local/bin ./install.sh  (will use sudo if needed)
+# Pin a release instead of the latest: WECHAT_USE_VERSION=v1.18.13 ./install.sh
+# (used by `wechat-use upgrade --tag`).
 set -euo pipefail
 
 REPO="leeguooooo/wechat-use"
@@ -1241,6 +1243,30 @@ elif [[ ! -f "$BRIDGE_PLIST_PATH" ]] && launchctl list 2>/dev/null | grep -q ai.
 fi
 }
 
+# Verify the release tarball in $1 against the published SHA256SUMS. The
+# published file lists per-binary hashes (wechat / wechatd), not the
+# tarball, so we extract and check every binary before any is installed.
+# A missing or mismatched sum is a failed install, never a skipped check.
+verify_release_tarball() (
+  cd "$1" || return 1
+  tar xzf "$2" || { err "无法解压 $2，拒绝继续。"; return 1; }
+  # SHA256SUMS lives inside the tarball too — prefer that (maintainer
+  # hashes) and cross-check against the separately-uploaded copy so a
+  # tampered tarball can't ship mismatched hashes.
+  if [[ ! -f SHA256SUMS ]]; then
+    err "tarball 内缺少 SHA256SUMS，拒绝继续。"
+    return 1
+  fi
+  if ! cmp -s SHA256SUMS SHA256SUMS.release; then
+    err "tarball 内 SHA256SUMS 与 release 附件不一致，拒绝继续。"
+    return 1
+  fi
+  if ! shasum -a 256 -c SHA256SUMS >/dev/null 2>&1; then
+    err "二进制 SHA-256 校验失败，拒绝继续。"
+    return 1
+  fi
+)
+
 if [[ "${WECHAT_USE_INSTALL_LIB_ONLY:-0}" == "1" ]]; then
   return 0 2>/dev/null || exit 0
 fi
@@ -1268,7 +1294,9 @@ trap 'exit 143' TERM
 # print the version up front and also cleanly handles the case where
 # the tarball name is version-suffixed.
 step '2/4 检查并下载工具版本'
-if ! LATEST_TAG=$(curl -fsSLI --connect-timeout 20 --max-time 60 -o /dev/null -w '%{url_effective}' \
+if [[ -n "${WECHAT_USE_VERSION:-}" ]]; then
+  LATEST_TAG="v${WECHAT_USE_VERSION#v}"
+elif ! LATEST_TAG=$(curl -fsSLI --connect-timeout 20 --max-time 60 -o /dev/null -w '%{url_effective}' \
   "https://github.com/${REPO}/releases/latest" 2>/dev/null \
   | sed -E 's#.*/tag/##'); then
   err '无法连接版本服务器，现有安装未修改；请稍后重试。'
@@ -1278,7 +1306,7 @@ if [[ ! "$LATEST_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   err '未取得有效版本号，现有安装未修改；请稍后重试。'
   exit 1
 fi
-info "最新版本：${LATEST_TAG}"
+if [[ -n "${WECHAT_USE_VERSION:-}" ]]; then info "指定版本：${LATEST_TAG}"; else info "最新版本：${LATEST_TAG}"; fi
 
 TARBALL="wechat-${LATEST_TAG}-darwin-arm64.tar.gz"
 BASE_URL="https://github.com/${REPO}/releases/download/${LATEST_TAG}"
@@ -1293,29 +1321,8 @@ if ! curl -fsSL --retry 2 --connect-timeout 20 --max-time 60 "${BASE_URL}/SHA256
   exit 1
 fi
 
-# Verify tarball integrity against the published SHA256SUMS. The
-# published file lists per-binary hashes (wechat / wechatd), not the
-# tarball, so we compute + check here explicitly before extracting.
 info "校验 tarball SHA-256"
-(
-  cd "${STAGE}"
-  tar xzf "${TARBALL}"
-  # SHA256SUMS lives inside the tarball too — prefer that (maintainer
-  # hashes) and cross-check against the separately-uploaded copy so a
-  # tampered tarball can't ship mismatched hashes.
-  if [[ ! -f SHA256SUMS ]]; then
-    err "tarball 内缺少 SHA256SUMS，拒绝继续。"
-    exit 1
-  fi
-  if ! cmp -s SHA256SUMS SHA256SUMS.release; then
-    err "tarball 内 SHA256SUMS 与 release 附件不一致，拒绝继续。"
-    exit 1
-  fi
-  if ! shasum -a 256 -c SHA256SUMS >/dev/null; then
-    err "二进制 SHA-256 校验失败，拒绝继续。"
-    exit 1
-  fi
-)
+verify_release_tarball "${STAGE}" "${TARBALL}" || exit 1
 success "SHA-256 校验通过"
 
 # Prepare the required clone using verified staged binaries BEFORE replacing
