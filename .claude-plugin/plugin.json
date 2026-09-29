@@ -1,6 +1,6 @@
 {
   "name": "wechat-use",
-  "version": "1.18.15",
+  "version": "1.18.16",
   "description": "WeChat CLI and MCP for macOS and experimental Windows x64; select the platform-specific runtime.",
   "author": {
     "name": "leeguooooo"
