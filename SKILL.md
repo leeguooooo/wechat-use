@@ -182,7 +182,7 @@ Endpoints:
 | GET  | `/chats` | sessions |
 | GET  | `/unread` | unread |
 | GET  | `/contacts` | contacts (query + limit) |
-| GET  | `/chat/:wxid` | recent N messages for one chat |
+| GET  | `/chat/:wxid` | conversation metadata (not message rows) |
 | GET  | `/chat/:wxid/history` | history (limit + since + until) |
 | GET  | `/resolve` | resolve_recipient |
 | POST | `/send` | send_text — returns `{status: delivered / submitted_unconfirmed / status_unknown / failed, diagnostic, ...}` |
