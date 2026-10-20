@@ -157,6 +157,6 @@ wechat-use send --image /absolute/path/image.png --recipient '收件人' --json
 
 ## 恢复与数据保护
 
-`wechat-use setup` 复用已有登录、激活和有效权限。旧权限开关不生效时，按设置窗口针对当前程序处理，不清空其他应用授权。日常读取不需要重启微信、扫描新的密钥或点开图片。
+`wechat-use setup` 复用已有登录、激活和有效权限。权限步骤以 `setup --json` 的 `service.accessibility_required` 为准；1.19 public 原生后台路径为 false，使用系统调试接口，不转入旧版辅助功能拖图标流程。日常读取复用已验证的密钥，不要求重启微信或点开图片。
 
 密钥、配置、源消息 XML、账号标识和私有诊断只保存在用户自己的机器；不打印、上传或提交到仓库。不要用 SQLite 直接打开微信原库，不覆盖原库，不清理未知任务的 claim、pending 或输出。
