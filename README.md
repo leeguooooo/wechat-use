@@ -8,6 +8,10 @@
 
 把 macOS 上的微信变成给 AI agent / bot 用的**本地 API**。不上云、不上 iPad 协议、纯本地实现，数据只在你这台 Mac 上动。
 
+[![观看 wechat-use 中文介绍视频](./assets/wechat-use-zh-promo-cover.jpg)](./assets/wechat-use-zh-promo.mp4)
+
+40 秒了解搜索聊天记录、发消息、连接 AI agent 和本机独立副本。画面为功能示意，使用虚构消息。
+
 > `wechat-use` 是 **`*-use` 系列**的一员——让 AI agent 直接操作你本地真实工具 / 设备：
 > [`profile-use`](https://github.com/leeguooooo/profile-use)（本地个人资料填表）·
 > [`iphone-use`](https://github.com/leeguooooo/iphone-use)（驱动真 iPhone）·
