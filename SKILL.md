@@ -90,7 +90,7 @@ curl -fsSL https://raw.githubusercontent.com/leeguooooo/wechat-use/main/install.
 - 微信联系人 / 群成员 / 未读消息
 - 收新消息 / 实时监听 / on-message 回调
 - 导出聊天 / 数据库统计 / 收藏
-- MCP 查询微信历史 / 联系人 / 朋友圈
+- MCP 查询微信历史 / 联系人；朋友圈当前返回 `db_scope_unsupported`，不要为此重复初始化。
 - 对接 Hermes / n8n / Dify / LangChain 本地 agent
 - WeChat bot framework / Wechaty-like puppet
 
