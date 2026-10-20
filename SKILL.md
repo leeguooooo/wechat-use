@@ -3,13 +3,13 @@ name: wechat-use
 description: "Use WeChat on macOS Apple Silicon or Windows x64: query sessions, contacts and history, listen for messages, and send authorized text. Select the host-specific backend first. Windows has a standalone experimental CLI/MCP package with no system Python requirement; macOS uses the managed WeChat 4.1.9 clone and supports HTTP Bridge/Wechaty."
 metadata:
   author: leeguooooo
-  version: "1.18.15"
+  version: "1.19.0"
   platform: macOS-arm64, Windows-x64-experimental
 ---
 
 # WechatUse — select the host platform first
 
-This skill supports **macOS Apple Silicon and experimental Windows x64**. Never tell a Windows user that WechatUse has no Windows version. Plugin/skill version 1.18.15 is metadata; the runtime releases are independently versioned (macOS v1.18.13, Windows windows-v0.1.0).
+This skill supports **macOS Apple Silicon and experimental Windows x64**. Never tell a Windows user that WechatUse has no Windows version. Plugin/skill version 1.19.0 is metadata; the runtime releases are independently versioned (macOS v1.19.0, Windows windows-v0.1.0).
 
 - **Windows:** follow only the Windows section below. Do not apply macOS requirements, activation/setup commands, LLDB, Accessibility, shell installer or managed 4.1.9 instructions.
 - **macOS:** skip the Windows section and follow the macOS section.
@@ -71,850 +71,92 @@ This plugin defines **no UserPromptSubmit hook**. A Python-not-found hook error 
 
 # macOS only: stable CLI
 
-## Setup failures and user reports (v1.18.7+)
+# wechat-use
 
-Release status: v1.18.13 is published; check GitHub Releases for subsequent versions. The capabilities below apply to the released build; users on older versions can upgrade with the README install command.
+## 安装检查
 
-Do not require users to identify their macOS version or whether this is a fresh install before helping. The setup window collects redacted environment and service facts automatically. Read the `WXS-…` problem code from an error screenshot; if more detail is needed, the user can click “复制诊断信息” on any setup page, including a waiting page. The window also provides a minimal report when core cannot start. Never request keys.json, activation tokens, raw memory output, or private chat data.
-
-Missing system developer-tool authorization is detected before initialization and uses “授权并继续” with the native macOS administrator confirmation. Preserve existing login and grants. Do not suggest reinstalling or globally resetting permissions for an unexplained initialization failure. A v1.18.6 error window can use its existing “修复安装” button to upgrade once to the current release; then follow the specific diagnosis rather than repeatedly reinstalling.
-
-Unified CLI for WeChat on macOS. Send messages and query the encrypted local databases for sessions, contacts, chat history, group members, Moments, favorites. Conversation selection runs inside the managed clone without activating or raising its windows.
-
-## Managed WeChat 4.1.9 (v1.18.0+)
-
-The installer automatically copies a supported local 4.1.9 or downloads a pinned Tencent DMG (no prompt). It installs `~/Applications/WeChat-4.1.9-wechat-use.app` with its own bundle ID and sandbox container, disables that clone's updates, and saves `~/.wx-rs/managed-wechat.json`.
-
-All CLI, daemon, HTTP bridge, and MCP operations default to that clone. Check its current state first and reuse an existing login. If it is closed, launch it with `open -g "$HOME/Applications/WeChat-4.1.9-wechat-use.app"`. Request first-time login only when it is actually required, then run `wechat-use init`. Do not substitute `open -a WeChat`, sign the primary `/Applications/WeChat.app`, remove the managed selection, or fall back to the primary when the clone is closed. Only 4.1.9 receives ongoing compatibility work. When repairing installation, rerun the installer; do not download the latest WeChat.
-
-## Unified setup and recovery (v1.18.6+)
-
-Use `wechat-use setup --json` to inspect the current setup stage without opening UI. For a normal user, the curl installer and interactive `wechat-use init` use the same native setup window. It preserves existing activation, login and keys, selects compatible installed developer tools for the tool only, starts the official background service, and verifies actual service ownership and permissions.
-
-If a user action is needed, run `wechat-use setup` or open `~/Applications/WechatUseSetup.app`. Let the window handle activation, login, system authorization, drag-and-drop and rechecking. Do not give users sequences of `doctor`, `init`, `launchctl`, or `xcode-select` repair commands. Never launch a Terminal-owned daemon as a permission workaround. The service must be owned by the official bridge.
-
-The bridge's `/setup/status` remains available before keys or Accessibility grants are ready. It is diagnostic only; sending remains gated. Setup control uses local signals to the validated launchd process, not an unauthenticated HTTP write endpoint.
-
-An unconfirmed setup test is persisted and is not automatically replayed after closing or reopening the window. `--skip-verify` explicitly skips sending; permission readiness alone is not delivery evidence. Human identity confirmation and actual macOS grants remain user-controlled.
-
-[User setup guide](docs/setup.html)
-
-## Background execution
-
-When System Settings shows the tool enabled but the actual launchd bridge still rejects Accessibility, do not treat the displayed switch as proof. Check the installed path and signature, refresh only that tool's switch, and recheck a freshly loaded official service. If those checks still fail, the specific old permission entry may be stale. An authorized local computer-control agent can remove and re-add only the failing tool entry using the current installed binary. Identify the exact row before each action; do not use blind coordinates or reset other apps' permissions. Preserve the dedicated WeChat process and keys. Afterwards verify HTTP health, the daemon's real Accessibility result, and that its parent is the official bridge. A user identity challenge remains a user action.
-
-Normal operations must preserve the user's foreground window. Do not call
-`open -a`, activate/raise/unminimize the clone, switch applications, or use
-foreground/global hotkeys as routine preparation. Use process-targeted input
-and background conversation navigation, and verify the exact recipient.
-This also applies to installation, initialization, permission errors, and service
-recovery. Return actionable diagnostics without automatically opening Settings,
-Finder, permission dialogs, or retrying a send. `doctor --fix-tcc` is an explicit
-interactive recovery command and opens System Settings.
-Foreground recovery is a last resort only after available background methods
-are shown to be unavailable. Never activate and blindly resend an unconfirmed
-message; inspect delivery first. A blank AX snapshot alone does not justify
-foreground recovery or restarting WeChat.
-
-## Fast path (read this first)
-
-**Send a WeChat message in one call:**
+先运行 `wechat-use --version`。缺少程序时使用GitHub Release安装器：
 
 ```bash
-wechat-use send "早上好" Lisa                 # fuzzy name match (remark / nick / alias)
-wechat-use send "hi" filehelper              # wxid — zero DB lookup, fastest
-wechat-use send "提醒一下" 20590343959@chatroom  # group wxid (ends in @chatroom)
+curl -fsSL https://raw.githubusercontent.com/leeguooooo/wechat-use/main/install.sh | sh
 ```
 
-Resolution rules (applied in order):
+不要通过npm分发二进制，也不要逐件覆盖八件套。安装被未知任务拒绝时保留原状态，不强杀调试器或清理意图。新机器还需先准备并登录独立4.1.9副本；不能改用主微信。
 
-1. RECIPIENT matches a wxid shape (`wxid_…`, `…@chatroom`, `gh_…`, `biz_…`, or reserved like `filehelper`) → skip all DB work and send directly.
-2. Otherwise, search the local contact DB (remark / nickname / alias / wxid) with session-recency bias:
-   - single match → send
-   - multiple matches but only one has recent activity (30d) → send to that one
-   - otherwise → exit 2 + JSON `{"status":"ambiguous","candidates":[...]}`; the agent picks and retries with the explicit wxid
+## Triggers
 
-On ambiguous, a sample response:
+- 发消息 / 发微信 / send WeChat
+- 查聊天记录 / 微信历史 / 搜索消息
+- 微信联系人 / 群成员 / 未读消息
+- 收新消息 / 实时监听 / on-message 回调
+- 导出聊天 / 数据库统计 / 收藏
+- MCP 查询微信历史 / 联系人 / 朋友圈
+- 对接 Hermes / n8n / Dify / LangChain 本地 agent
+- WeChat bot framework / Wechaty-like puppet
 
-```json
-{
-  "status": "ambiguous",
-  "hint": "Lisa",
-  "candidates": [
-    {"wxid": "lishuang683451", "display_name": "lisa", "last_seen": "2026-04-20 05:34:55"},
-    {"wxid": "wxid_xxx", "display_name": "Lisa (另一个)", "last_seen": ""}
-  ],
-  "note": "multiple matches; pass one of the wxids explicitly: wechat-use send <text> <wxid>"
-}
-```
+## 图片读取（统一入口，普通图与HD原图已实机验收）
 
-Agent should: read `candidates[0].wxid`, retry `wechat-use send "<text>" <wxid>`. Don't ask the user unless the top candidate has no recent activity or multiple candidates do.
+聊天图片使用统一的精确消息取图接口。不要要求用户先在微信里点图，也不要把加密 CDN 地址、DAT 或 WXGF 原始字节直接交给识图模型。
 
-## HTTP Bridge for agent integration (v1.10+)
+- `history`、`digest`、`search`、`sent`、`recalled`、`new-messages` 主动读取时，每批最多自动解析两张图。结果在 `media.local_path` / `media.image` 中；图片可用时 `local_path_status=ready`。
+- `media.image_ref` 是取图引用：`chatId`、`localId`、`serverId`、`md5`。localId/serverId 保持十进制字符串，不经 JS Number 转换；chatId 使用精确会话 ID。`deferred` 表示未开始该图，读取任务确实需要时可用该引用继续取图。
+- MCP 的 `wechat_get_history` / `wechat_search_messages` 会直接附上已可用的 image content block，模型能看见图片。其余图调用 `wechat_get_image`，arguments 原样使用 `media.image_ref` 对象；`wechat_self_messages` 为保护账号信息返回不透明的 `image_ref` 字符串，传 `{"imageRef": token}`。这三个读取工具可设 `include_images:false` 只读元数据。
+- HTTP：现有 bridge 的 `GET /image` 和 gateway REST 的 `GET /v1/image` 使用同一组引用字段作查询参数，返回校验后的 PNG/JPEG/GIF/WebP 字节；继续使用原有认证。Hermes `media.imageRef` / `media.downloadUrl` 给出相同引用和相对于 bridge 的取图地址。旧 CDN 元数据不是已解密图片。
+- Wechaty `MessageImage` 和图片类 `MessageFile` 返回解密、必要时转换后的 FileBox，不再将缓存 DAT 当作可显示图片。
+- 搜索 HTML 报告、归档导出和聊天窗口 `/img` 共用同一取图服务；查看用图片与经 XML MD5 验证的原始载荷分开。
+- 元数据查询、发送 ACK 检查、后台事件流只附图片引用，不偷偷启动下载。用户主动读图才调用取图接口。`--no-images` 可跳过主动读取的自动取图；`search --no-media` 也不会暗中下载。
+- `unavailable` / 已有 pending / unknown 不自动重试，不清旧 claim/pending。保留文字和引用，明确报告图片当前不可用；不猜 URL、密钥或资源版本。
 
-`wechat-bridge` is a separate binary that wraps the daemon's RPCs as a stable localhost HTTP surface. Use this when wiring WeChat into agent platforms (Hermes, n8n, Dify, LangChain, custom bots) — HTTP is cheaper to integrate than spawning the CLI per call.
+前台 history/search 若有消息分片不可安全读取，`meta.status=possibly_stale_unavailable_shards` 且 `historical_completeness_verified=false`。只能说明已返回的内容，不能据此断言没有其他消息；部分范围没有命中时返回不可用。后台接收和游标仍要求完整范围。已有环境不要因图片暂不可用而重新 init、重启微信或清理 claim/pending。
+
+原生下载仍受签名适配、目标账号/进程、owner 生命周期和发布执行门约束。1.19起提供统一图片接口；可用范围以消息元数据、签名适配和实际取图结果为准。TP/HTTP图片资源未认证时明确返回不可用，不猜参数下载。诊断型 `image inspect`、会话未读计数不启动下载。朋友圈、收藏或转发子消息中的独立业务资源，不伪造聊天消息引用去下载。
+
+## 初始化与升级
+
+- `init` 面向已登录的专用4.1.9，只读取有限内存候选，并用首页认证和完整私有DB/WAL快照验证。不直接用SQLite打开原库，也不自动重启或安装断点。`--force` 重新被动扫描；正常调用可先认证同账号缓存，但仍验证私有快照。
+- `initialization_scope.snapshot_validated_databases`列出经过完整私有快照验证的核心范围；其他可用密钥只做首页认证，`full_account_integrity_verified=false`。核心范围全部验证及原采集进程释放确认后，才原子切换配置。核心密钥空、缺失、歧义或超时保留旧配置；旧claim/pending不清理。
+- 后续导入新分片若提示需要初始化，可重新执行被动`init`。已发布的初始化密钥集合不由旧分片刷新器修改。
+- 升级以GitHub Release八件套为一个原子版本。服务更新先核验原owner，再正常退出旧服务；未知owner会拒绝更新，不强杀调试器。
+- `doctor --paths`的`page_authenticated`仅证明密钥匹配，`logical_integrity_verified=false`；它不证明全库、历史消息或接收端已验证。
+
+## 日常操作
+
+专用微信须已经登录；缺少副本时先按 [准备指南](docs/managed-419-setup.md) 创建。默认绑定保存在 `~/.wx-rs/managed-wechat.json`。副本关闭或账号未就绪时明确报告，不切到主微信。
 
 ```bash
-# Start bridge (binds 127.0.0.1:18400 by default)
-wechat-bridge &
-
-# Health + send-readiness
-curl http://127.0.0.1:18400/health
-
-# Send
-curl -X POST http://127.0.0.1:18400/send \
-  -H 'Content-Type: application/json' \
-  -d '{"wxid":"filehelper","text":"hi"}'
-
-# SSE message stream — ⚠️ ALWAYS pass ?since=<epoch>
-# Without ?since, default is 0 = backfills entire local message history
-# (1MB+ in seconds for typical accounts). For agent / long-running flows
-# always pass a since timestamp; pick "now" for live-only or last-checkpoint.
-SINCE=$(date +%s)
-curl -N "http://127.0.0.1:18400/messages/stream?since=$SINCE"
-```
-
-Endpoints:
-
-| Method | Path | Maps to |
-|---|---|---|
-| GET  | `/health` | ping + send_status |
-| GET  | `/chats` | sessions |
-| GET  | `/unread` | unread |
-| GET  | `/contacts` | contacts (query + limit) |
-| GET  | `/chat/:wxid` | conversation metadata (not message rows) |
-| GET  | `/chat/:wxid/history` | history (limit + since + until) |
-| GET  | `/resolve` | resolve_recipient |
-| POST | `/send` | send_text — returns `{status: delivered / submitted_unconfirmed / status_unknown / failed, diagnostic, ...}` |
-| POST | `/typing` | typing indicator (only when `--shape hermes`) |
-| GET  | `/messages/stream?since=<epoch>` | new_messages_since polled into SSE; **pass `since`** or you'll get the full backlog on first connect |
-
-### Account readiness and image sends
-
-Image sending and self-message reads resolve the current account in each message
-shard; File Transfer Assistant warmup samples are no longer required on the
-managed 4.1.9 path. `/health` reports `wechat.state` and `wechat.account_state`
-separately from daemon liveness. `not_ready` means the account is not ready for
-sending; `needs_wechat_login` in doctor requires completing WeChat login, not
-reinitializing or deleting caches. WeChat may still require phone confirmation
-or a QR login. The tool never bypasses that confirmation.
-
-Ordinary files, videos and cards are not supported by native send yet.
-
-### Images over HTTP
-
-The image path must name a file on the bridge host. Native requests accept
-`image_path` (or `imagePath`); Hermes requests use `imagePath`. Omit the text
-field for an image-only request. Send text and images separately; combining
-both in one request is rejected instead of silently dropping content.
-
-```bash
-curl -X POST http://127.0.0.1:18400/send \
-  -H 'Content-Type: application/json' \
-  -d '{"wxid":"filehelper","image_path":"/absolute/path/photo.png"}'
-```
-
-### SSE payload shape (v1.10.28 — Wechaty-aligned + isMentioned)
-
-`/messages/stream` emits `event: messages` carrying a JSON array of:
-
-```ts
-{
-  messageId: string,
-  chatId: string,                // wxid (DM) or groupid@chatroom
-  senderId: string,              // in group: sender's wxid; in DM: the other party's wxid
-  senderName: string,
-  chatName: string,
-  isGroup: boolean,
-  body: string,                  // human-readable text. For URL / quote / mini_program, body is the title — raw XML is NOT exposed here.
-  hasMedia: boolean,
-  mediaType: "image"|"voice"|"video"|"file"|"",
-  mediaUrls: string[],           // first entry is CDN URL when applicable
-  mentionedIds: string[],        // v1.10.25+ — authoritative @-mention list resolved by daemon
-  isMentioned: boolean,          // v1.10.28+ — bridge-authoritative "this row @-mentions ME". Self-sent rows are always false.
-  quotedParticipant: string,     // v1.10.27+ — populated from refer.fromUser on quote replies
-  botIds: string[],              // legacy heuristic self-marker; NEW consumers should rely on fromSelf instead
-  fromSelf: boolean,             // v1.10.25+ — bridge-authoritative "this row was produced by our own POST /send"; DROP THESE to avoid self-echo loops
-  messageKind: "text"|"image"|"audio"|"video"|"contact"|"emoticon"|"location"|
-               "url"|"attachment"|"mini_program"|"chat_history"|"transfer"|
-               "red_envelope"|"recalled"|"system"|"unknown",  // v1.10.27+, aligned to Wechaty's MessageType enum
-  urlLink?:     { title, description, url, thumbUrl },                             // present iff messageKind=url
-  miniProgram?: { title, description, appId, username, pagePath, thumbUrl },        // present iff messageKind=mini_program
-  refer?:       { svrId, fromUser, chatUser, displayName, content },              // present on quote replies
-  recall?:      { replacedMsgId, text },                                            // present iff messageKind=recalled
-  media?:       { aesKey, md5, cdnUrl, cdnThumbUrl, length, durationSeconds, localPath },  // structured metadata for image/audio/video/attachment
-  timestamp: number,
-}
-```
-
-The full JSON Schema is committed at [`wx/schema/sse-payload-v1.10.28.schema.json`](https://github.com/leeguooooo/wechat-use/blob/main/wx/schema/sse-payload-v1.10.28.schema.json) and enforced by a contract test in the daemon build.
-
-**Consumer checklist:**
-
-- Filter self-echo with `fromSelf === true`. Do NOT use `senderId === myWxid` — in DM both directions share the same senderId.
-- In groups, only respond when `isGroup && isMentioned` — the daemon already resolves the authoritative mention comparison, so don't reimplement `mentionedIds.includes(myWxid)` yourself (your wxid may be a remark / lookup that the daemon resolves correctly). The bridge will also drop non-`@` group rows automatically when `WECHAT_BRIDGE_GROUP_MENTION_ONLY=1`.
-- Need the URL only? `mediaUrls[0]`. Need aesKey + md5 to decrypt or verify? `media.cdnUrl / media.aesKey / …`.
-- For `messageKind: "image"`, do **not** inline base64 image bytes in chat responses. Call `wechat-use image get <messageId> --chat <chatId> --json`, parse `absolutePath`, then use the host agent's file/image Read capability on that path. Default `--from auto` (since v1.13.11) tries the daemon's in-memory lookup first (fast, works when the user has opened the image at least once in WeChat) and falls back to CDN replay only on miss. If the result is `image not yet viewed in WeChat (cache empty), and CDN fallback failed`, ask the user to open the image once in WeChat and retry. `cdn-expired` or `needs local-decrypt adaptation` means neither path can recover this image — surface that to the user instead of guessing.
-- Expect `body` for URL / quote / mini_program to be the human title. If you were previously parsing raw `<appmsg>` XML from body, migrate to the dedicated `urlLink` / `miniProgram` / `refer` objects.
-- Backward compatible: every pre-v1.10.25 field is preserved in name + type. New fields are additive.
-
-**Security notes for agents:**
-- Bridge binds 127.0.0.1 — not exposed to LAN without tunnelling.
-- Set `WECHAT_BRIDGE_BEARER=<secret>` env var to require `Authorization: Bearer <secret>` on non-`/health` routes. Use this if tunnelling via Tailscale / SSH.
-- **Activation gating is enforced inside wechatd**, not in the bridge. A missing / expired `wechatuse_` token → HTTP 401 / 402 on `/send`. Bridge cannot bypass activation.
-
-## Command groups
-
-| Group | Commands | First-time requirement |
-|-------|----------|-----------------------|
-| Diagnostics | `doctor` | — (run first; checks AX permission, daemon status, WeChat binary fingerprint) |
-| Setup | `init` | Log in to the managed clone once; scans the running 4.1.9 process without restarting it. Reuse cached keys while queries work. |
-| Send | `send` | Automatically prepares the selected clone's chat context; no manual chat selection or warmup message. |
-| Query (messaging) | `sessions`, `unread`, `new-messages`, `contacts`, `history`, `search`, `members`, `stats`, `export`, `image`, `sent` (v1.16.12+, cross-chat self-sent) | `init` first; daemon auto-starts on demand (v1.7.5) |
-| Saved items | `favorites` | `init` first; daemon auto-starts on demand |
-| **Realtime (v1.3+)** | `listen` | daemon auto-starts on demand (v1.7.5) |
-| **Daemon (v1.2+)** | `daemon start\|stop\|status\|ping` | optional — query/listen commands pull it up automatically when needed |
-| **HTTP Bridge (v1.10+)** | `wechat-bridge` (separate binary) | agent / Hermes / n8n integration over localhost HTTP — see section below |
-| **Wechaty Puppet gateway (v1.10.32+)** | `wechat-wechaty-gateway` (separate binary, gRPC :18401) | for the human writing a wechaty bot — NOT used by this skill. If the user asks "can I run my wechaty bot on this?", point them to https://github.com/leeguooooo/wechat-use#接-ai-agent and stop. Don't try to write wechaty TS from this skill. |
-| **`wechat-use tunnel` (v1.11+)** | `wechat-use tunnel setup` | Expose local REST bridge to a remote service via Cloudflare Tunnel; details in `docs/remote-gateway.md`, do NOT inline the full setup flow in this skill. |
-| **`wechat-use orchestrate` (v1.12+)** | `wechat-use orchestrate setup --outbox-url= --webhook-url= --bearer= --webhook-secret=` | Long-running worker that polls a SaaS outbox API and pushes SSE inbound events to a SaaS webhook. NAT-friendly (Mac all-outbound, no public IP / domain). Used by SaaS integrations (cherry-class). Protocol: `docs/v1.12-orchestrate-protocol.md`. Don't inline the SaaS-side endpoint design here. |
-| **Auth (v1.9.1+)** | `auth activate \| status \| renew` | mandatory activation before `send` — code from @WechatCliBot on Telegram |
-| **`update-guard` (v1.16.33+)** | `update-guard status \| disable \| enable` | 锁 WeChat 后台自动热更新通道(chflags uchg `MacUpdate` 路径),Tencent 推新 dylib 不会替换。建议 init 完成后跑一次 `disable` 让当前 build 的适配 stable;CLI 起手会自检并 warn,不阻塞 |
-| **`probe-build` (v1.16.32+)** | `probe-build` | WeChat 升级到工具不认的新 build 时跑。本机 literal_scan + pattern-match routing 锚点输出 shift 数值,POST `/v2/probe` 给适配队列。**不传 binary**,只传 derived 数值。read-side 命令(history / sessions 等)经 literal_scan fallback 立即可用 |
-
-All query commands default to **YAML output** (agent-friendly, low token). Add `--json` to get JSON.
-
----
-
-## 🛑 Safety rules (CRITICAL — read before calling `send`)
-
-**Every `send` call must resolve to a known wxid.** No silent default to "current chat" — that flag (`--current-chat`) was removed pre-1.13; if the resolver can't find a recipient, stop and ask the user.
-
-Correct flows for "给 XXX 发 YYY":
-
-1. **Just try it**: `wechat-use send "YYY" XXX`. Fast-path resolver (see top of this doc) handles wxid-shaped targets instantly and fuzzy-matches names against the local contact DB with session-recency bias.
-2. **On exit 2 + `status: "ambiguous"`**: if `candidates[0]` has `last_seen` within ~30 days and others are stale/empty, the CLI already auto-picked it and returned success. If it truly was ambiguous (multiple candidates with recent activity), pick one yourself by asking the user — don't guess.
-3. **On `no contact matches "XXX"`**: ask the user for the wxid (or have them confirm a candidate from `wechat-use contacts --query XXX --brief`).
-
-**Hard rules (the agent MUST follow):**
-
-- **DO NOT** guess or fabricate a wxid. If resolution fails, escalate to the user.
-- **DO NOT** scan the filesystem / grep logs / use AppleScript to hunt for a wxid. The CLI already searches the local contact DB via the fast path — trust it. If it can't find the recipient, stop and ask the user.
-- **DO NOT** invoke `wechat-use contacts` followed by `wechat-use send` as two separate calls unless the first fast-path send already told you it was ambiguous. The one-liner saves ~400ms and one agent round-trip.
-
----
-
-## Capability matrix
-
-| Capability | Status | Command |
-|------------|--------|---------|
-| Extract DB key, cache layout (required first step for query commands) | ✅ | `wechat-use init` |
-| Send text to a specific wxid / 群名 / 昵称 | ✅ | `wechat-use send "..." <recipient>` |
-| Any Unicode / emoji / CJK / length | ✅ | built-in |
-| Zero UI flash (no focus steal) | ✅ | default for `send` |
-| List recent chat sessions | ✅ | `wechat-use sessions` |
-| Sessions with unread messages | ✅ | `wechat-use unread` |
-| Incremental new messages since last check | ✅ | `wechat-use new-messages` |
-| Contact lookup / fuzzy search | ✅ | `wechat-use contacts [--query KW]` |
-| Chat history (private / group) | ✅ | `wechat-use history <chat> [-n 500]` |
-| **LLM-ready group digest** | ✅ v1.13.33 (`--with-id` v1.16.19+) | `wechat-use digest <chat> [--json --with-id]` |
-| **User alias map for chats** | ✅ v1.16.19+ | `wechat-use alias add/list/rm` |
-| Full-DB keyword search (FTS5 trigram, v1.16.21+) | ✅ | `wechat-use search <kw> [--in CHAT] [--since TIME]` |
-| Group members | ✅ | `wechat-use members <group>` |
-| Chat statistics (senders / types / hours) | ✅ | `wechat-use stats <chat>` |
-| Export chat → Markdown / JSON | ✅ | `wechat-use export <chat> --format markdown -o ...` |
-| Favorites (text/image/article/...) | ✅ | `wechat-use favorites [--type ...] [--query KW]` |
-| Image media (local in-memory lookup + CDN fallback) | ✅ | `wechat-use image get <messageId> --chat <id>` |
-| Voice media (raw SILK_V3) | ✅ | `wechat-use audio get <svr_id>` (1.13.21+) |
-| Voice transcribe (whisper.cpp + SILK pipeline) | ✅ | `wechat-use audio setup` 一次 + `wechat-use audio transcribe <svr_id>` (1.13.25+) |
-| First-send chat context | automatic | The daemon selects and verifies the exact recipient before sending; the user does not need to click a chat or send a warmup message. |
-| **Realtime inbound stream (v1.3)** | ✅ | `wechat-use listen` — watches new messages, push to stdout |
-| **Inbound callback → shell command (v1.3)** | ✅ | `wechat-use listen --on-message "handler.sh"` (WECHAT_MSG_* env vars) |
-| **Server-side wxid filter (v1.3)** | ✅ | `wechat-use listen --wxid filehelper` |
-| **Background daemon (v1.2+, lazy-start v1.7.5)** | ✅ | `wechat-use daemon start` — or auto-spawn by any query command |
-| **WeChat binary fingerprint verification (v1.7.2+)** | ✅ | `wechat-use doctor` surfaces drift after WeChat hot-fix updates |
-| Send image / file | ⏳ roadmap | — |
-| Group broadcast | ❌ disallowed | anti-abuse; LICENSE forbids |
-| Linux / Intel Mac | ❌ | This macOS backend requires arm64; Windows uses the separate experimental backend above. |
-| unverified WeChat build | ⚠️ unverified | adaptation data may drift; `wechat-use doctor` flags it |
-
----
-
-## Agent: first-use setup
-
-**Step 1 — Check `wechat` is on PATH**:
-
-```bash
-command -v wechat
-```
-
-If missing:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/leeguooooo/wechat-use/main/install.sh | bash
-# Ensure ~/.local/bin is on PATH
-case "${SHELL##*/}" in
-  fish) fish_add_path "$HOME/.local/bin" ;;
-  zsh)  grep -q '.local/bin' ~/.zshrc  2>/dev/null || echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc ;;
-  bash) grep -q '.local/bin' ~/.bashrc 2>/dev/null || echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc ;;
-esac
-export PATH="$HOME/.local/bin:$PATH"
-```
-
-**Step 2 — Initialize the already-logged-in managed WeChat**:
-
-```bash
-wechat-use init
-```
-
-On the managed WeChat 4.1.9 this scans the existing process for per-database
-keys; it does not need to quit and relaunch WeChat. Keep the existing account,
-container and login state. Reuse cached keys while queries work, including
-after a daemon restart; only rescan when keys are missing or fail to decrypt.
-
-If WeChat itself is on a login screen, the user must complete that genuine
-login challenge. Do not manufacture a new challenge by restarting a logged-in
-clone, replacing its bundle identity, or deleting its local account data.
-
-**Step 3 — Check service permissions**:
-
-```bash
+wechat-use setup
 wechat-use doctor --json
+wechat-use sessions -n 20 --json
+wechat-use contacts --query '名字' --json
+wechat-use history '群名或精确ID' -n 50 --json
+wechat-use search '关键词' --in '群名' --json
+wechat-use history '精确会话ID' -n 50 --json --no-images
 ```
 
-Check the running daemon's `daemon_accessibility` result and the bridge's
-health. Accessibility belongs to the installed helper identities; a signed
-upgrade should retain those grants. If missing, run `wechat-use init --fix-tcc`: it opens the correct pane, selects the binaries in Finder for drag-and-drop, then automatically rechecks the running daemon. Do not ask the user to find hidden paths or type recovery commands themselves.
+优先使用精确会话 ID。昵称或群名有歧义时查看候选，不自行选人。查询失败、覆盖不足或超时不能解释成“没有消息”；保留结构化状态。
 
-**Step 4 — Verify a send without manual chat selection**:
+发送必须有用户明确的收件人和内容授权。只读检查不发送测试消息，也不要求用户先手动发一条消息。
 
 ```bash
-wechat-use send "安装验证" filehelper --json
+wechat-use send '具体内容' '收件人' --json
+wechat-use send --file /absolute/path/report.txt --recipient '收件人' --json
+wechat-use send --image /absolute/path/image.png --recipient '收件人' --json
 ```
 
-The daemon reads the selected chat identity and uses background conversation navigation
-to select the exact requested recipient before typing. It checks the identity
-again before Enter. Missing build calibration, ambiguous context, a changed
-recipient, or an unavailable target stops the send before dispatch. Do not
-ask the user to click filehelper or send a warmup message as a normal setup step.
-The current local candidate requires a matching recipient-context calibration;
-distribution of this calibration is still pending and must be tested before release.
+发送前确认接收者；正常操作不激活、抬起或切换微信窗口。`submitted_unconfirmed` / `status_unknown` 不是失败，也不是送达。保留原 request ID，先查询原回执和精确历史，不换 ID 重发；发送者服务器记录不等于对方已读或接收文件字节一致。
 
-Only a verified record in the requested chat counts as delivery. A
-`delivery_verify_timeout` can be a delayed delivery: inspect history before
-retrying. If automatic preparation fails, keep the diagnostic output and run
-`wechat-use doctor --json`; do not restart the logged-in WeChat or reactivate
-its account as a workaround.
+## 接入 agent
 
-An empty AX tree or blank automation screenshot is not proof that WeChat is
-blank, logged out, or frozen. Use process/CLI/database evidence and the user's
-visible state before diagnosing it. Never quit/relaunch a logged-in clone just
-to recover an automation snapshot.
+- 只读 MCP 使用 `wechat-mcp` stdio server。历史、搜索、图片工具走同一读取服务；图片可用时返回图片 content block。MCP 发送由独立的 `wechat-send-mcp` 提供，仅在用户需要发送能力时配置。
+- HTTP Bridge 默认监听本机 `127.0.0.1:18400`。`/health` 检查当前 daemon、接收和发送就绪状态；不能只看 HTTP 200。
+- Hermes 使用 `wechat-bridge --shape hermes`。群里是否 @ 当前账号以 bridge 的 `isMentioned` 为准；用 `fromSelf` 排除自发消息，不能只比较 senderId。
+- `/messages/stream?since=<epoch>` 使用明确起点，避免无意回放全部历史。事件流只带媒体引用；主动需要图片时调用 `/image`，不要把加密 CDN 地址直接交给识图模型。
+- Wechaty 使用 `wechat-wechaty-gateway`；图片返回可显示的 FileBox。CLI、MCP、Bridge、gateway 的细节以各自 `--help` 和 [能力说明](docs/capabilities.md) 为准。
 
----
+程序分别为 CLI `wechat`、后台 `wechatd`、HTTP `wechat-bridge`、只读 `wechat-mcp`、发送 `wechat-send-mcp`、`wechat-wechaty-gateway` 及两个内部校验/任务组件。内部组件不接收聊天内容或由调用方提供的任意代码；不要逐件替换版本。
 
-## Send failure modes (agent self-recovery table)
+## 恢复与数据保护
 
-When `wechat-use send` returns `{ok: false, …}` or stderr matches the `reason:` slot in the support payload, use the playbook below before asking the user to debug. Diagnose in the background and request human action only for a confirmed step that cannot be completed there. Never infer permission to take focus from a failed send.
+`wechat-use setup` 复用已有登录、激活和有效权限。旧权限开关不生效时，按设置窗口针对当前程序处理，不清空其他应用授权。日常读取不需要重启微信、扫描新的密钥或点开图片。
 
-| `reason:` slot | Root cause | Agent action |
-|---|---|---|
-| `desktop_locked` | macOS system lock screen is active; no message was sent | Ask the user to unlock the Mac system screen. Keep the existing WeChat login and account data; do not request WeChat login or manual chat selection. Retry only after the desktop is unlocked. |
-| `delivery_misrouted` | Delivery landed in another chat | Stop further sends, identify the actual destination, and repair recipient selection. Do not silently retry or ask for manual warmup. |
-| `delivery_verify_timeout` | Send path ran but delivery is not yet confirmed | Inspect the requested chat history before retrying; a delayed message may still arrive. |
-| `slot_send_bp_armed_no_fire` | Automatic input-context preparation did not activate the send signal | Keep the diagnostic and run `wechat-use doctor --json`. Do not ask for manual warmup, restart WeChat, or reactivate the account. |
-| `wechat_not_running` | Selected clone is not running | Launch `open -g "$HOME/Applications/WeChat-4.1.9-wechat-use.app"`, then check whether the existing login recovered. Request login only if required. Never launch the primary app as a fallback. |
-| `slot_send_bp_failed_to_arm` (detail: `send adapter install did not complete within 30s`) | WeChat has `get-task-allow=false` (official default signing); wechatd's local debugging interface can't connect | Run `wechat-use doctor` to confirm `wechat_get_task_allow ✗`. Then ask the user to copy-run the **merge-mode re-sign block** that `install.sh` prints (or `wechat-use doctor` suggests). Needs sudo, must be run by the user. Do NOT use a replace-mode `codesign --entitlements ...` command — it strips WeChat's existing system entitlements and breaks TCC for WeChat itself. |
-| `daemon_accessibility FAIL` / `ax_trusted=false` after a recent install/upgrade | Multiple `ai.wechat.*` LaunchAgents on the machine — orchestrate (KeepAlive) re-spawned wechatd with a stale launchd responsibility chain | Re-run `curl -fsSL https://raw.githubusercontent.com/leeguooooo/wechat-use/main/install.sh \| bash`. v1.16.12+ install.sh bootouts every `ai.wechat.*.plist` and bootstraps in the right order. Don't try to surgically `launchctl kickstart` — it doesn't reset the responsibility chain. |
-| `tcc_accessibility_denied` (wechat-bridge or wechatd untrusted) | The required macOS Accessibility grant is missing | Confirm the missing grant with `wechat-use doctor --json` and report it without opening any windows. If interactive recovery is required, explain that `wechat-use doctor --fix-tcc` opens permission dialogs and System Settings; the user must enable the relevant grants. Do not run it as an automatic retry. |
-| `activation_*` / `subscription_*` / `unauthorized` | Activation code expired / not redeemed | `wechat-use auth status` to confirm. Then `wechat-use auth activate <code>`. Direct user to https://t.me/WechatCliBot to request an activation code (research / personal use only — no commercial inquiries answered). |
-| `dylib_fingerprint_unverified` | WeChat auto-updated to a build not in our verified set | `wechat-use doctor` shows the new fingerprint. Tell user to turn off WeChat auto-update (WeChat → 设置 → 通用 → 「有更新时自动升级」) and repair the managed 4.1.9 clone with the installer. Do not upgrade to another WeChat version. |
-
-**Key principle**: every `reason:` slot is stable enum; the support payload includes `ax_trusted`, `input_monitoring`, `binary_fingerprint`, `cli_version`, `daemon_version` — match on those exact field names, not on the human-readable Chinese error message (it may evolve across releases).
-
-**LaunchAgent / TCC handbook for agents**: if you ever need to manually reset responsibility chains (e.g. user's machine has a customized LaunchAgent layout), use `launchctl bootout` + `launchctl bootstrap` — never `launchctl kickstart -k`. `kickstart` doesn't re-read plist `EnvironmentVariables` and doesn't reset launchd's responsibility-chain cache. The `install.sh` upgrade flow is the reference implementation.
-
----
-
-## Usage — send
-
-```bash
-# Recipient resolves wxid / 群名 / 昵称 / 备注 (fuzzy match against local contact DB)
-wechat-use send "你好 🎉" filehelper
-wechat-use send "会议 5 分钟后开始" lishuang683451
-wechat-use send "早上好" Lisa                # 找不到 → friendly error + 候选
-
-# Group send (resolver also handles group display names)
-wechat-use send "今天 19:00 团建" "AI 星球"
-
-# JSON output for agents that parse responses
-wechat-use send "ok" filehelper --json
-
-# Dry-run: resolve recipient + validate args, do NOT actually send. Useful when
-# the agent wants to verify a fuzzy name → expected wxid before committing.
-wechat-use send "draft" "李工" --dry-run --json
-```
-
-### `send` arguments
-
-| Arg | Required | Description |
-|-----|----------|-------------|
-| `<TEXT>` (positional) | yes | Message body. Any length, any Unicode. |
-| `<RECIPIENT>` (positional) or `--wxid` | yes | Target wxid / chatroom id / 昵称 / 群名 / 备注. Resolver picks the most-recently-active match if hint is fuzzy. |
-| `--mention <wxid>` | no | Visual `@<name>` prefix (text-only, no real ping ack — see issue #4). |
-| `--dry-run` | no | Resolve recipient + validate but don't send. Pairs well with `--json` for agent dry-checks. |
-| `--json` | no | JSON output |
-
-### `send --json` 三态契约 (v1.13.20+)
-
-所有 `--json` 输出都带顶层 `ok: bool`,agent 直接 `if (r.ok) {...} else {...}` 不需要解析三套 schema:
-
-| 状态 | 触发 | shape (顶层字段) |
-|---|---|---|
-| **success** | `wechat-use send TEXT RECIPIENT --json` 真发成功 | `{ok: true, sent: true, reason: null, diagnostic: {…SendResult 全字段…}}` |
-| **dry-run** | `--dry-run --json`(resolver OK + 不真发) | `{ok: true, dry_run: true, text, resolved_wxid}` |
-| **error (early)** | `--json` + 参数错 / resolver 找不到 / ambiguous / 网络断 | `{ok: false, exit_code: <int>, error: "<msg>"}` |
-| **error (send fail)** | 发送失败或送达未确认（自动准备失败 / 权限缺失 / 版本未适配等）；核对 diagnostic 和历史记录 | `{ok: false, sent: false, reason: "<reason>", diagnostic: {…}}` |
-
-```bash
-# 推荐:agent 用 jq 分支
-wechat-use send "hi" filehelper --dry-run --json | jq -e '.ok' && echo "✓ resolved" || echo "✗ failed"
-```
-
-stderr 仍然有 human-readable 错误描述(给终端用户看);agent 只需 parse stdout JSON。
-
----
-
-## Usage — query
-
-```bash
-# Sessions (recent conversations)
-wechat-use sessions -n 20                           # full yaml
-wechat-use sessions --brief -n 20                   # 单行/会话, 带未读数
-wechat-use sessions --filter group --json -n 20     # 只看群聊 (chat_type: group / private / official_account / folded / other)
-# JSON 字段命名:未读数是 `unread_count`(下划线全名), 不是裸 `unread`。brief 视图渲染成 [N unread] 仅是显示, 实际字段是 unread_count。
-
-# Contacts
-wechat-use contacts --query 李                      # fuzzy match nickname/remark/wxid
-wechat-use contacts --brief -n 50                   # 单行/联系人 (姓名 + wxid)
-
-# Unread
-wechat-use unread -n 5
-
-# History (chat positional or --chat flag, both accepted)
-wechat-use history "张三" -n 2000
-wechat-use history --chat 21263894984@chatroom -n 200
-wechat-use history "AI 星球" --since "2026-04-01" --until "2026-04-15" -n 200   # ISO date OK
-wechat-use history "AI 星球" --since 1719793200 --until 1720484400 -n 200       # epoch OK too
-
-# Search (FTS5 trigram, v1.16.21+)
-wechat-use search "会议纪要"                              # 全局,毫秒级
-wechat-use search "报销" --in "财务群"                    # 群限定
-wechat-use search "claude" --since "3 days ago"          # 加时间窗
-wechat-use search "report" --since "2026-05-01" --until "2026-05-10"
-
-# Search agent UX (v1.16.22+):
-wechat-use search "desktop" --in "Helm" --context 5m     # 每条命中带前后 5 分钟同群上下文,文本模式 `>` 标记命中
-wechat-use search "report" --timeout-ms 5000             # 硬上限 5s,超时 exit 124 + `search_timeout`
-# `--json` meta 多带: elapsed_ms / row_count / chat_resolved / chat_hint / context_secs
-
-# HTML 证据页 (v1.16.23+, v1.16.24 重做 WeChat 主题 UI + 默认 inline 图片):
-wechat-use search "desktop" --in "Helm" --report                    # 单文件 HTML,默认 --context 5m,图片 base64 inline
-wechat-use search "房价" --in "立水桥" --report --no-media           # 跳过图片(escape hatch,渲染成占位卡片)
-wechat-use search "通知" --in "群" --report --out report.html       # 自定义路径,无 sidecar 目录,转发邮件/微信直接带走
-# stdout = 写入的文件路径(text 模式)或 {ok, report_path, hit_count, ...}(--json)
-# 输出文件 self-contained:inline CSS,无 JS,无 CDN,可直接邮件/微信/Notion 转发
-
-# Search caveats (FTS5 trigram limits):
-# - 查询 < 3 字符: 全局会报 `query_too_short`,加 `--in <chat>` 则
-#   fallback 到 LIKE 单 shard。例: `wechat-use search 卡 --in <chat>`
-# - 首次升级后 daemon 在后台 backfill (266k 消息 ~86s 本机);期间
-#   查询会报 `search_index_unavailable`,等一两分钟后再查
-# - mirror DB at `~/.wx-rs/search-index.db` (SQLCipher 加密,key 从
-#   现有 WeChat key HKDF 派生),mirror 跟 WeChat 数据库一起在 home 目录
-# - `--context` 需要配合 `--in <chat>` 才生效(无 chat 时被 daemon 跳过)
-
-# Group members
-wechat-use members "AI 星球"
-
-# Stats
-wechat-use stats "AI 星球"
-```
-
-### `history --json` payload shape (stable contract for agents)
-
-**顶层包装(`history` / `sessions` / `unread` / `search` / `digest` 全一致):**
-
-```json
-{
-  "meta": {
-    "chat_latest_timestamp": 1778981425,
-    "shards_scanned": 2,
-    "shards_hit": 2,
-    "status": "ok",
-    "order": "desc",
-    "now_unix": 1779178200,
-    "since_resolved": 1778573400,
-    "until_resolved": 1779178200
-  },
-  "rows": [ {...row...}, {...row...} ]
-}
-```
-
-不是裸数组。`jq` 要 `.rows[]` 不是 `.[]`。`meta.order` 是 v1.16.12+ 加的字段,告诉
-你 rows 是 `"desc"`(新→老,history 默认)还是 `"asc"`(老→新,digest 默认 / `wechat
-history --order asc`)。**别拿 `rows[0]` 当"最新"也别当"最老",先看 `meta.order`。**
-
-`meta.status` 取值:`ok` / `windowed`(传了 `--since`/`--until`)/ `possibly_stale`
-(SessionTable 比 history 领先 > 24h,大概率分片漂)/ `possibly_stale_unknown_shards`
-(磁盘有新分片 daemon 不认,要重跑 `wechat-use init`)。
-
-**v1.16.19+ 时间窗回灌(history):** `meta.now_unix` 是查询时的本机 epoch;
-`meta.since_resolved` / `meta.until_resolved` 是 `--since` / `--until` 自然语言解析后的
-实际 epoch(没传不出现)。自然语言 `--since "2 days ago"` 解析完后,agent 不用重算时区,
-直接拿这三个值跟用户复述"实际查的是 X 到 Y, 当下 Z"。
-
-**每条 message row 字段(snake_case):**
-
-| 字段 | 类型 | 说明 |
-|---|---|---|
-| `local_id` | int | DB 行主键(per chat 单调)。`image get <local_id> --chat <wxid>` 用这个取图。 |
-| `server_id` | int | WeChat 服务端 msg id(撤回时引用 `replacedMsgId`)。 |
-| `local_type` | int | 原始 type code。低 16 位 mask 后 = `1` 文本 / `3` 图 / `34` 语音 / `43` 视频 / `49` appmsg / 等。 |
-| `message_kind` | string | enum: `text` / `image` / `audio` / `video` / `url` / `mini_program` / `recalled` / `appmsg` / 等。Wechaty 对齐。 |
-| `display_text` | string | 已清洗后的 human-readable body(text 直接 = body;image/url 抽 title;recalled 给替代文案)。 |
-| `message_content` | string | 原始 body(可能是 raw XML / 群消息带 `<sender>:\n` 前缀)。debug 用,生产逻辑请用 `display_text`。 |
-| `sender_wxid` | string \| null | 群消息 = 真发送者 wxid;**DM 两侧都是 `null`**(WeChat DB 在 1:1 chat 不记 sender wxid)。**不能单凭这个判 self-sent**(DM 会双方都误判 + 系统消息也是 null)。 |
-| `sender_display_name` | string \| null | daemon-resolved 展示名(群里的群昵称 / 联系人备注 / 昵称)。**v1.16.19+ 改:** 联系人 DB 不可达 / 这条 wxid 找不到时,fallback 到裸 wxid 而不是 null(agent 不用同时处理 has/has-not 两种 shape)。DM self-sent / 系统消息仍为 null。 |
-| `real_sender_id` | string | per-chat 自增 ID(字符串,**永远非空**)。WeChat 给当前账号分配一个固定 id(本机经验值是 `"2"`,不同账号可能不同),其它整数 = 对方/群成员。**判 self-sent 用这个**:扫 `filehelper` 历史得到自己的 id(filehelper 100% 自发,占比最大那个就是 self id),其它 chat 用同一 id 过滤。 |
-| `chat_id` / `username` | string | 会话 wxid(DM)或 `xxxx@chatroom`(群)。 |
-| `chat_display_name` | string | 群名 / 联系人备注 / 昵称(v1.13.9+ 自动解析)。`xxxx@chatroom` 直接看得懂。 |
-| `create_time` | int | epoch seconds。 |
-| `created_at` | string | ISO 本地时区(`2026-05-18T01:30:45+09:00`),v1.13.30+ 派生,人读直接拿这个。 |
-| `is_mentioned` | bool | 当前账号在群里被 `@` 了(daemon 端权威解析,客户端别再算一遍)。 |
-| `media` | object | `image` / `voice` / `video` / `file` 才有: `{aesKey, md5, cdnUrl, cdnThumbUrl, length, durationSeconds, localPath, dat_path?, dat_md5?, dat_exists?}`。 |
-| `urlLink` / `miniProgram` / `refer` / `recall` | object | type-specific 结构化字段(见 SSE schema)。 |
-
-字段稳定性:增加 = 默认 `null` / 缺省;**不会**重命名 / 改类型(契约由 v1.10.27 起的 SSE schema 单测守)。
-
-**想跨 chat 拉"我说过什么":** 用 `wechat-use sent --since "7 days ago" --json`(v1.16.12+),
-比手动遍历 sessions + filter 干净得多。
-
-**群名歧义:** `wechat-use history "AI 星球"` 可能匹配多个(同名群 + 同名联系人)。
-撞歧义时 CLI 会列出候选 + 报错,改用 `--chat <wxid>` 或 `--chat <chatroom_id@chatroom>`
-明确指定。
-
-**v1.16.19+ user alias:** 长群名 / emoji 前缀群名 fuzzy 经常 miss(`詹密群` /
-`季景铭郡业主三群`),用 alias map 一劳永逸:
-
-```bash
-wechat-use alias add 詹密群 17765974862@chatroom
-wechat-use alias add AI星球 20590343959@chatroom
-wechat-use alias list                # 看现有
-wechat-use alias rm 詹密群           # 删
-```
-
-Resolver 优先级:wxid-shape > **alias** > contact.db fuzzy。`wechat-use send` /
-`history` / `digest` / `search` / `recalled` / `sent` / `listen --wxid` 全部
-共享同一查找(写到 `~/.wx-rs/aliases.json`)。
-
-```bash
-
-# Export
-wechat-use export "张三" --format markdown -o zhang.md
-wechat-use export "AI 星球" --format json -o ai.json -n 5000
-
-# Incremental (since last checkpoint saved in ~/.wx-rs/cursor.json)
-wechat-use new-messages -n 50      # advances checkpoint
-wechat-use new-messages --reset    # rewind checkpoint to "now" so next call starts fresh
-
-# Favorites
-wechat-use favorites                          # all locally-cached items
-
-# Image media (local in-memory lookup first, CDN fallback)
-wechat-use image get <local_id> --chat <chat_id>            # decrypts + writes to ~/.wechat/media-cache/<md5>.jpg
-wechat-use image inspect <local_id> --chat <chat_id>        # dump CDN metadata (no key/url leak)
-
-# Voice media — history auto-transcribes by default (v1.13.25+)
-wechat-use audio setup [--model small|medium|large]         # one-time: install deps + download model
-wechat-use audio transcribe <svr_id> [--language zh]        # single-file pipeline
-wechat-use audio get <svr_id>                               # raw SILK_V3 bytes, no decode
-```
-
-### Voice — agents reading group history just work (v1.13.25+)
-
-After running `wechat-use audio setup` once (~2-3 minutes downloads ~1.5GB
-medium model + builds silk-decoder), **`wechat-use history` automatically
-transcribes voice messages** so the agent sees the spoken content in
-`display_text` (and structured in `media.transcript`) — no more
-`[语音消息]` placeholders breaking conversation context. Transcripts are
-cached by SHA-256 of the audio blob, so re-reading the same chat is
-near-instant.
-
-```bash
-# One-time setup
-wechat-use audio setup
-
-# Read a chat — voice messages already transcribed inline
-# (Output is {meta, rows} not a bare array — use `.rows[]` not `.[]`.)
-wechat-use history <chat> --json | jq '.rows[] | {kind: .message_kind, text: .display_text}'
-```
-
-Opt-out (skip transcribe to keep history fast / private):
-
-```bash
-wechat-use history <chat> --no-transcribe                   # skip transcribe entirely
-wechat-use history <chat> --transcribe-model small          # smaller / faster model
-wechat-use history <chat> --quiet                           # silence stderr progress lines
-                                                        # (auto-on in --json mode)
-```
-
-The `media.transcript_status` field on each audio row tells the agent
-where the text came from: `cached` / `transcribed` / `no_deps` (run
-`wechat-use audio setup`) / `failed` / `skipped_svr_id_zero` / `invalid_input`.
-
-`wechat-use doctor` reports audio readiness in two rows so machine consumers
-can check default-model status without parsing strings:
-
-- `audio_transcribe_setup` — overall ffmpeg / whisper-cli / silk-decoder
-  presence. Always `ok: true` (audio is optional; missing tools must
-  not flip overall doctor status to `needs_init`).
-- `audio_transcribe_default_model` — `ggml-medium.bin` exists. `ok`
-  reflects reality, but excluded from the overall status calculation
-  so a user without medium still sees `status: "ok"`. Read this row's
-  `ok` field directly to know whether `wechat-use history` default
-  transcribe will work.
-
-For a single voice file outside `history`:
-
-```bash
-SVR=$(wechat-use history <chat> --json | jq -r '.rows[] | select(.message_kind=="audio") | .server_id' | head -1)
-wechat-use audio transcribe "$SVR"           # prints transcript directly
-```
-
-`wechat-use audio transcribe --json` defaults to redacting the transcript
-text (only metadata in JSON output) so agents can't accidentally log
-private conversation text. Pass `--include-transcript` to opt in.
-
-### Voice — manual decode if you skip `audio setup`
-
-`wechat-use audio get <svr_id>` writes the raw `.silk` bytes locally
-(pure local DB read; no debugging interface / in-memory lookup / CDN). To play / share without going through `audio transcribe`:
-
-```bash
-# One-time decoder build
-git clone https://github.com/kn007/silk-v3-decoder /tmp/silk-v3-decoder
-cd /tmp/silk-v3-decoder/silk && make
-
-# Per-file
-SVR=691336177198502815
-wechat-use audio get "$SVR"
-/tmp/silk-v3-decoder/silk/decoder ~/.wechat/audio-cache/$SVR.silk /tmp/$SVR.pcm
-ffmpeg -y -f s16le -ar 24000 -ac 1 -i /tmp/$SVR.pcm /tmp/$SVR.wav
-```
-
-> **Note**: SNS / Moments commands (`sns-feed`, `sns-search`, `sns-notifications`) and the legacy `bootstrap` subcommand were removed in the v1.13 line. The data is still in `sns.db` if you query it directly with sqlcipher, but no first-class CLI surface yet — track via roadmap.
-
----
-
-## Usage — realtime listen (v1.3)
-
-**`wechat-use listen` streams new incoming WeChat messages to stdout as they arrive** (latency <500ms). Requires the background daemon.
-
-```bash
-# One-time: start the daemon (keep running in a separate terminal or `&`)
-wechat-use daemon start
-
-# Stream all new messages
-wechat-use listen
-
-# Stream only messages from one chat (server-side filter)
-wechat-use listen --wxid filehelper
-
-# JSONL output for agent consumption
-# IMPORTANT: pipe stdout only — daemon spawn / errors go to stderr.
-#   wechat-use listen --format json | your-adapter      ← OK
-#   wechat-use listen --format json 2>&1 | your-adapter ← WRONG, stderr 混流会把 [daemon] 字样混进 stdin
-wechat-use listen --format json
-
-# Trigger a shell command per message — the handler sees WECHAT_MSG_* env vars
-# Handler stdout is routed to /dev/null (so it doesn't pollute the JSONL stream
-# that agents pipe to jq); use stderr or write to a file for logging.
-wechat-use listen --on-message "./ai-reply.sh"
-wechat-use listen --wxid lisa --on-message 'echo "[$(date +%H:%M)] $WECHAT_MSG_SENDER_WXID: $WECHAT_MSG_TEXT" >> log.txt'
-```
-
-### `--on-message` env vars
-
-| Variable | Meaning |
-|---|---|
-| `WECHAT_MSG_TEXT` | Message body (already cleaned: compressed content decompressed, group `<sender>:\n` prefix stripped) |
-| `WECHAT_MSG_SENDER_WXID` | Sender wxid for group messages (empty string for private chats — there the chat wxid = sender) |
-| `WECHAT_MSG_TABLE` | `Msg_<md5(chat_wxid)>` — internal table name |
-| `WECHAT_MSG_CREATE_TIME` | Unix epoch seconds (as string) |
-| `WECHAT_MSG_LOCAL_ID` / `WECHAT_MSG_LOCAL_TYPE` | Internal message id + type code |
-| `WECHAT_MSG_SENDER_ID` | DB `real_sender_id` (numeric; rarely needed — use `SENDER_WXID` instead) |
-| `WECHAT_MSG_DB` | Absolute path of the message DB the message came from |
-
-**Safety notes**:
-- Content is passed via env vars, not shell-interpolated into the command. Safe against `$(rm -rf)` style injection.
-- Handler runs async (one subprocess per message); if it takes longer than messages arrive, handlers will pile up. Keep handlers fast or add your own queueing.
-
-### Daemon lifecycle
-
-```bash
-wechat-use daemon start              # foreground; or `wechat-use daemon start &` for background
-wechat-use daemon status             # socket + pid + uptime
-wechat-use daemon ping               # round-trip latency sanity check
-wechat-use daemon stop               # graceful shutdown
-```
-
-The daemon caches each encrypted local DB connection so `wechat-use sessions` / `contacts` / `history` / `unread` run in **<30ms** (vs 400-500ms without it). It also powers `wechat-use listen` by watching `message_*.db-wal` file changes.
-
-### Fuzzy chat resolution
-
-`history` / `search --in` / `stats` / `export` / `members` accept a `<chat>` argument that is matched against (in order): exact wxid → remark → nick_name → alias. If ambiguous, the most-recently-active match is picked. Use `wechat-use contacts --query ...` first if you need to disambiguate.
-
-### Output format
-
-All query commands emit YAML by default. Add `--json` for JSON:
-
-```bash
-wechat-use sessions --json | jq '.rows[] | select(.chat_type=="private" and .unread_count>0)'
-wechat-use new-messages --json                # ideal for agents consuming incremental updates
-```
-
----
-
-## When to invoke this skill (agent triggers)
-
-**Send**:
-
-- "给 Lisa 发消息：..."
-- "发微信通知我妈 '到家了'"
-- "提醒 XXX 会议 5 分钟后开始"
-- "send to filehelper ..."
-
-**Query**:
-
-- "微信里 Lisa 最近说了什么" → `wechat-use history Lisa`
-- "搜一下群里谁提过报销" → `wechat-use search 报销`
-- "AI 星球群有多少人 / 谁发言最多" → `wechat-use members` + `wechat-use stats`
-- "有哪些未读消息" → `wechat-use unread`
-- "导出我和张三的聊天记录" → `wechat-use export 张三 -o ...`
-- "XX 群里那张图是什么" → `wechat-use history "XX群" -n 50` (找 message_kind: image 的 local_id) → `wechat-use image get <local_id> --chat <chat_id>`
-- "最近收藏了什么" → `wechat-use favorites`
-
-**Realtime**:
-
-- "帮我盯着 Lisa 发来的消息，收到就自动回复 XXX" → `wechat-use daemon start` then `wechat-use listen --wxid <lisa-wxid> --on-message "..."`
-- "把微信消息接进我的 AI assistant" → `wechat-use listen --format json --on-message "curl -X POST ..."`
-- "监控这个群谁提到 '会议'，马上通知我" → `wechat-use listen --wxid <group>` + handler that greps
-
-Example user utterances and the right first call:
-
-- "给 Lisa 发消息：会议 5 分钟后开始"  → `wechat-use contacts --query Lisa` → `wechat-use send --wxid ... --text ...`
-- "send to filehelper today's summary" → `wechat-use send --text ... --wxid filehelper`
-- "查一下 XXX 群最近谁发言最多" → `wechat-use stats "XXX"`
-
----
-
-## 🔐 Security / data scope
-
-- Everything runs **100% locally** — no data leaves the machine.
-- `wechat-use init` caches the raw DB key in `~/.wechat/keys.json` (mode 0600). **Treat that key like a password** — anyone with `keys.json` + a copy of `~/Library/Containers/com.tencent.xinWeChat/...` can decrypt all your WeChat data.
-- Never commit `~/.wechat/` to git. Never paste the key into chat windows. If leaked: logout + re-login WeChat to rotate the key.
-
----
-
-## Mechanism (brief)
-
-**`init`** — reuses cached database keys when valid and otherwise scans the running managed clone through the macOS public debugging interface. Preserve the existing login; do not restart WeChat as routine initialization. The debugging interface detaches after capture.
-
-**Query commands** — load the captured material + discovered DB paths from local config and read the encrypted local databases directly. When the background daemon is running, queries are routed over a local Unix socket to a persistent connection pool — cuts latency 5-10×.
-
-**`listen`** — watches the on-disk message databases for changes and pushes each new row to subscribed CLI processes over the daemon socket. Zero network traffic; runs entirely locally.
-
-**`send`** — uses macOS Accessibility API to silently target the chat input, then drives WeChat's normal send pipeline via the local debugging interface. Zero window activation / focus steal.
-
----
-
-## Caveats
-
-- **macOS arm64 only**. Only the independent WeChat 4.1.9 clone receives ongoing support — run `wechat-use doctor` to confirm your specific build is in the adaptation set. Other versions may need adaptation work.
-- Binary is a standalone native executable (GitHub Releases). `install.sh` auto-clears macOS Gatekeeper quarantine attribute.
-- **Not a WeChat API**. Userland research artifact. Can break on any WeChat update.
-- **LICENSE forbids commercial use** — see [LICENSE](LICENSE) + [DISCLAIMER.md](DISCLAIMER.md).
-
-## Updating the CLI
-
-Before starting a session, the agent should check that `wechat` is reasonably current. The binary is self-contained; upgrading just means pulling a newer release.
-
-**Check current version**:
-
-```bash
-wechat --version
-```
-
-**Upgrade to latest (safe, idempotent)** — `wechat-use upgrade` (see "## Upgrade" below). On a version without that command, re-run the installer:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/leeguooooo/wechat-use/main/install.sh | bash
-```
-
-Both pull the latest tagged release binary from GitHub, re-installs to `~/.local/bin/wechat`, and re-clears any Gatekeeper quarantine attribute. No data is lost — `~/.wechat/keys.json` + `state.json` are untouched.
-
-**When to upgrade**:
-
-- A `wechat-use` command printed `wechat-use X is available`, or `wechat-use upgrade --check` shows `current -> latest`
-- `wechat --version` is more than one minor behind the latest release tag at https://github.com/leeguooooo/wechat-use/releases
-- A command that the user asks for doesn't exist yet (the capability matrix on this page reflects the latest release; older binaries may be missing commands)
-- WeChat itself was updated — new versions may need a fresh `wechat` release to track adaptation data (watch https://github.com/leeguooooo/wechat-use/releases for a note)
-
-**Stopping WeChat's auto-update (highly recommended, v1.16.33+)**:
-
-After `wechat-use init` succeeds + `wechat-use send` works on the current build, run:
-
-```bash
-wechat-use update-guard disable
-```
-
-This locks the `MacUpdate` directory under WeChat's container with `chflags uchg` so Tencent's silent dylib hot-update can't replace the binary. The current adaptation profile stays valid until the user explicitly runs `wechat-use update-guard enable` to restore. `wechat-use doctor` shows `wechat_update_guard` as ✓ when disabled. Pure user-level reversible — does not touch the WeChat binary, NSUserDefaults, or TCC.
-
-**Adapting a brand-new WeChat build that isn't in the verified list (v1.16.32+)**:
-
-If `wechat-use doctor` shows `wechat_dylib_fingerprint ✗ (not in verified list)` AND `wechat-use send` fails with "build not supported":
-
-```bash
-wechat-use probe-build
-```
-
-This hashes the local dylib, runs `literal_scan` to verify SQLCipher key extraction, pattern-matches three routing anchors against the ARM64 slice, and POSTs the derived numerical shifts to the adaptation queue. **Does not upload binary bytes.** Read-side commands (`history` / `sessions` / `unread` / `sent`) keep working via the literal_scan fallback while waiting for `send` adaptation.
-
-**Updating the skill metadata** (this `SKILL.md` itself, when the agent is installed via `skills.sh`):
-
-```bash
-# refresh skill files (including this SKILL.md) from the public repo
-npx skills update leeguooooo/wechat-use -g
-```
-
-If the agent sees `wechat: command not found` after an `npx skills update`, it still needs to run `install.sh` — skill updates do **not** include the binary.
-
-## Upgrade
-
-The launcher command below is pending the next release that includes it. v1.18.13 and earlier still require the documented `install.sh` command to upgrade.
-
-When any `wechat-use` command prints `wechat-use X is available`, tell the user and offer to run
-`wechat-use upgrade` (updates the CLI only; add `--skills` to also refresh this skill — plugin,
-git checkout or installer-managed copy of wechat-use only). Check without changing anything:
-`wechat-use upgrade --check` (or `--json`). Pin a release with `--tag vX.Y.Z`. It never sends a
-WeChat message or asks for login. The user may also just say "升级 wechat-use" / "upgrade wechat-use".
-This is unrelated to `wechat-use update-guard`, which blocks WeChat's own auto-update.
-
-If the skill came from somewhere `upgrade` can't refresh:
-- Claude Code plugin: `claude plugin update wechat-use@leeguooooo-plugins`
-- Whole family: `curl -fsSL https://raw.githubusercontent.com/leeguooooo/plugins/main/upgrade-use-family.sh | sh`
-
-## Support
-
-- Issues → https://github.com/leeguooooo/wechat-use/issues
+密钥、配置、源消息 XML、账号标识和私有诊断只保存在用户自己的机器；不打印、上传或提交到仓库。不要用 SQLite 直接打开微信原库，不覆盖原库，不清理未知任务的 claim、pending 或输出。

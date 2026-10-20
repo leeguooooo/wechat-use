@@ -1,11 +1,13 @@
 # 完整能力矩阵
 
+以下以 macOS 1.19 为准。历史版本号表示引入时间，不能代替当前账号、签名适配和运行状态检查。Windows 范围见 [Windows 指南](windows.md)。
+
 | 能力 | 状态 | 命令 | 说明 |
 |------|------|------|------|
-| 提取 SQLCipher key | ✅ v1.1 | `wechat-use init` | 一次性；WeChat 重启后重跑 |
-| 抗 Tencent 热更（auto-calibrate） | ✅ v1.8.13 | `wechat-use init` 默认 | 新 dylib 自动适配，每个新 SHA 校准并缓存 |
+| 初始化当前账号 | ✅ v1.19 | `wechat-use init` | 有限被动扫描、核心私有快照验证后提交；正常调用可认证同账号缓存，重启微信不等于必须重新取钥 |
+| 微信版本适配 | 限定 4.1.9 | `wechat-use doctor` | 按当前指纹与签名适配核验；不支持的版本明确拒绝，不自动安装断点或改主微信 |
 | 后台发文本（零闪屏） | ✅ v1.0 / v1.8.10 真零闪 | `wechat-use send TEXT RECIPIENT` | 本地 keyboard event + 调试接口 |
-| daemon-backed send（~700ms 热路径） | ✅ v1.9.0 | 默认走 daemon | 持久 send 会话；CLI 只 RPC |
+| daemon-backed send | ✅ | 默认走 daemon | 本地 RPC 和签名原生发送路径；耗时以当前设备、初始化及送达确认结果为准 |
 | 不劫持用户手动发消息 | ✅ v1.9.1 | 默认 | 一次性 sentinel + 800ms 过期 |
 | recipient 模糊解析（昵称 / 备注 / wxid） | ✅ v1.1.5 | 默认 | 多匹配返回候选清单 |
 | 群发到群聊 | ✅ v1.1 | `wechat-use send "..." "群名"` | |
@@ -15,7 +17,7 @@
 | 审批时加备注 | ✅ v1.9.20 | admin 点 ✏️ 加备注 | `reviewer_note` 列，邀请来源长期可查 |
 | token 进 macOS Keychain | ✅ v1.9.1 | 自动 | service `wechat-use-profile-api` |
 | AEAD 加密 profile API | ✅ v1.9.1 | 自动 | XChaCha20-Poly1305 + HKDF(token) + 6h TTL |
-| send 冷启动预警 | ✅ v1.9.17 | `wechat-use doctor` + `wechat-use init` | doctor 三态 + init 完成打印 warm-up 指引 |
+| send 冷启动状态 | ✅ | `wechat-use doctor` / `setup` | 报告当前初始化和发送就绪状态，不要求用户先手动发消息 |
 | send 失败自动诊断块 | ✅ v1.9.16 | `wechat-use send` | 失败时打印可复制诊断块，一行贴回就能定位问题 |
 | history / search 跨分片合并 | ✅ v1.9.19 | `wechat-use history`、`search` | 跨分片自动合并 + 时间排序 |
 | **本地 HTTP bridge（agent 集成）** | ✅ v1.10.0 | `wechat-bridge` | 127.0.0.1:18400 loopback only;9 路 HTTP + SSE(完整路由表见下方);可选 `WECHAT_BRIDGE_BEARER`;`--shape hermes` 切 Hermes WhatsApp-bridge wire shape |
@@ -34,29 +36,29 @@
 | 全库消息搜索 | ✅ v1.1 | `wechat-use search <keyword> [--in <chat>]` | |
 | 有未读的会话 | ✅ v1.2 | `wechat-use unread` | private/group/official 过滤 |
 | 群成员 | ✅ v1.2 | `wechat-use members <group>` | |
-| 收藏 | ✅ v1.2 | `wechat-use favorites` | text/image/article/card/video |
+| 收藏 | 当前读取范围未开放 | `favorites` 保留命令 | 收藏资源未接入聊天快照与精确消息取图，不能伪造聊天引用下载 |
 | 统计 | ✅ v1.2 | `wechat-use stats <chat>` | 活跃度 / 发言人 / 时段 |
-| 收图（本地 + CDN fallback） | ✅ v1.13.11/12 | `wechat-use image get <messageId> --chat <id>` | 默认 `--from auto` 先走 daemon 内快路径（5–7 s 冷启），未命中再 fallback CDN replay。要求图先在 WeChat UI 里点开过一次 |
+| 聊天图片与原图 | ✅ v1.19 | `wechat-use image get <localId> --chat <id> --server-id <exactId>` | 验证缓存与签名原生下载；完整 XML MD5 校验，不需要先在 UI 点图。TP/HTTP 等未认证资源返回不可用 |
 | 收语音（raw SILK_V3） | ✅ v1.13.21 | `wechat-use audio get <svr_id>` | 本地纯读，落 `~/.wechat/audio-cache/<svr_id>.silk` |
 | 语音转文字（whisper.cpp + SILK pipeline） | ✅ v1.13.25 | `wechat-use audio setup` + `wechat-use audio transcribe <svr_id>` | `setup` 一次性装齐 ffmpeg / whisper-cpp / kn007 silk-decoder / 默认 medium 模型(1.5GB,中文准度好);`transcribe` 一条龙跑 silk → 16kHz wav → whisper。`--json` 默认 `transcriptRedacted: true` 不出文字防 agent log 外泄,`--include-transcript` 才出 |
 | **history 自动转写语音** | ✅ v1.13.25-28 | `wechat-use history <chat>` (默认) | agent 看群历史时,语音消息自动转成文字塞进 `display_text` + `media.transcript`,**告别 `[语音消息]` 占位破上下文**。SHA-256 内容寻址 cache 二次访问 0.4s 全 hit(`pipeline_version` 进 cache key v1.13.26+,tool 升级自动 invalidate);`media.transcript_status` 字段诊断(`cached` / `transcribed` / `no_deps` / `failed` / `skipped_svr_id_zero` / `invalid_input`);`--no-transcribe` opt-out / `--transcribe-model small` 切小模型 / `--quiet` 静默 stderr(JSON 模式自动开)。`wechat-use doctor` 拆 `audio_transcribe_setup`(总 ok)+ `audio_transcribe_default_model`(ok 反映现实)两行 v1.13.27+ |
 | display_name 解析（群名/备注/昵称） | ✅ v1.13.8/9 | `sessions` / `unread` / `contacts` / `history` | 自动把 `xxxx@chatroom` 映射成群名；history 同时给出 `chat_display_name`（agent 直接看懂） |
 | 4.1.9 适配 | ✅ v1.13.7 | `wechat-use init` | 跟上 WeChat 4.1.9 本地存储变化；查询命令全部复活 |
 | 导出（Markdown / JSON） | ✅ v1.2 | `wechat-use export <chat>` | |
-| 朋友圈数据(只读 sns.db) | ✅ v1.14.0 | `wechat-use sns-feed / sns-notifications / sns-search` | 朋友圈时间线 / 谁点赞评论了我 / 关键词检索;只读,纯本地 |
+| 朋友圈数据 | 当前读取范围未开放 | `sns-*` 保留命令 | 不属于已验证的聊天快照范围；命令存在不代表当前可安全读取 |
 | `wechat-use doctor --paths` | ✅ v1.14.0 | `wechat-use doctor --paths [--json]` | DB root + 3.x/4.x 路径 + WeChat 进程 + TCC 状态一行看完 |
 | `wechat-use doctor --image` | ✅ v1.14.1/2 | `wechat-use doctor --image [--json]` | 图片解密路径自检,避免假绿 |
 | `wechat-use init --literal-scan` | ✅ v1.14.0 | `wechat-use init --literal-scan` | 版本无关 fallback (WeChat 大版本升级 适配完成前临时跑) |
 | history 引用 / 合并转发 / 文件 | ✅ v1.14.0 | `wechat-use history` 自动渲染 | 引用消息 → `[引用 X 「abc」] ↳ Y: txt`;合并转发消息出 `forwarded_messages` 数组;文件消息出 `media` 元数据 |
 | `wechat-use history --brief --full` | ✅ v1.14.0 | `wechat-use history <chat> --brief --full` | brief 终端模式默认 100 char 截断,`--full` 关掉 |
 | daemon 缓存自适应 | ✅ v1.14.0 | 自动 | 改群名 / 改备注 / WCDB 重建 DB 时 daemon 自动检测变化 reopen,不再返老数据 |
-| 实时收消息 | ✅ v1.3 | `wechat-use listen [--wxid X] [--format json]` | 新消息 <500ms push;--wxid 接受昵称/群名(自动解析,不存在立即报错不 silent) |
+| 实时收消息 | ✅ | `wechat-use listen [--wxid X] [--format json]` | 受验证快照建立基线后推进游标；检查接收 ready，起步或不可用不能解释为空消息 |
 | AI 回调触发 | ✅ v1.3 | `wechat-use listen --on-message CMD` | 每条消息 spawn CMD,env 变量传 payload(下一行) |
 | `--on-message` env 变量表 | ✅ | — | `WECHAT_MSG_TEXT` (清洗后正文,自动剥群 sender 前缀) / `WECHAT_MSG_SENDER_WXID` (群消息;DM 为空) / `WECHAT_MSG_CREATE_TIME` (epoch s) / `WECHAT_MSG_LOCAL_ID` / `WECHAT_MSG_LOCAL_TYPE` / `WECHAT_MSG_TABLE` / `WECHAT_MSG_DB` / `WECHAT_MSG_SENDER_ID`(per-chat 序号字符串,几乎不用)。`WECHAT_MSG_*` 通过 env 传,免 shell 注入 |
-| 后台 daemon | ✅ v1.2 / v1.7.5 自动 | `wechat-use daemon start` (可选) | 持久 SQLCipher 池；查询 <30ms |
-| 全 Rust 二进制 | ✅ v1.5+ | `wechat` + `wechatd` | 比旧 Python 快 ~385× |
+| 后台 daemon | ✅ | `wechat-use daemon start` | 管理私有快照、读取租约、RPC 与接收状态；不直接用 SQLite 打开微信原库 |
+| 本地原生程序 | ✅ | 完整八件套 | CLI、后台与校验组件同源安装、签名和原子切换，不逐件覆盖 |
 | dylib SHA-256 指纹校验 | ✅ v1.7.2 | `wechat-use doctor` | 漂移立即标红 |
-| 发图片 / 文件 | ⏳ roadmap | — | 收图已 ship（v1.13.11+），发图分支适配中 |
+| 发图片 / 文件 | ✅ v1.19 | `send --image/--file ... --recipient ...` | 签名原生发送路径；保留 request ID，未知状态不重发，提交状态不当接收端验收 |
 | **wechaty Puppet gRPC gateway** | ✅ v1.10.32 | `wechat-wechaty-gateway` | 127.0.0.1:18401；任意 wechaty TS/Python/Go bot 零改动接真号 |
 | **远程 gateway（Cloudflare Tunnel）** | ✅ v1.11.1 | `wechat-use tunnel setup --hostname=...` | 把本机 REST 桥（:18402）暴露公网，远程 fetch + ES256 JWT 同步调；同步直连场景 |
 | **SaaS outbox/webhook 接入** | ✅ v1.12.0 | `wechat-use orchestrate setup` | NAT-friendly（不需公网/域名），Mac 全 outbound：poll SaaS outbox + push webhook，HMAC 签名 + 幂等键 + 持久化 ack |
