@@ -1,0 +1,16 @@
+# Local dev environment variables for `wrangler dev`.
+#
+# Copy this file to `.dev.vars` and fill in real values.
+# NEVER commit `.dev.vars` — it contains secrets.
+# `.dev.vars` is already in .gitignore (wrangler adds it automatically).
+#
+# How to get these values:
+#   WECHAT_USER_TOKEN  — run `wechat auth status`, copy the `user_token` field
+#   WECHAT_MACHINE_ID  — run `wechat auth status`, copy the `machine_id` field
+#   TARGET_WXID        — the wxid you want to receive the test message
+#                        (safe choice: "filehelper" = WeChat's File Transfer Helper)
+
+WECHAT_USER_TOKEN=wxp_tok_replace_me
+WECHAT_MACHINE_ID=mac-replace_me
+TARGET_WXID=filehelper
+PROFILE_API_URL=https://wxp.leeguoo.com

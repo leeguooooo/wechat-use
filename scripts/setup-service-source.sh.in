@@ -1,0 +1,348 @@
+#!/bin/bash
+# wechat-use/setup-service-source/v1
+# Independent canonical producer; no key scan, App action or send.
+set -euo pipefail
+readonly WECHAT_SETUP_VERSION='@WECHAT_SETUP_VERSION@'
+if [[ $# != 1 ]]; then exit 64; fi
+case "$1" in
+  --version) printf 'wechat-setup-service %s\n' "$WECHAT_SETUP_VERSION" ;;
+  repair|pause)
+    exec /usr/bin/python3 -I - "$1" <<'PYSERVICE'
+import base64, contextlib, fcntl, hashlib, json, os, plistlib, re, stat, subprocess, sys, time
+from pathlib import Path
+# Library bytes come from the canonical SDK-only installer, embedded at build.
+lib={'__name__':'service_sdk_inventory'}
+exec(compile(base64.b64decode('@SDK_INSTALLER_SOURCE_BASE64@'),'<fixed-sdk-inventory>','exec'),lib)
+require=lib['require'];Refused=lib['Refused']
+HOME=Path.home();SDK=HOME/'.local/share/wechat-use/sdk';STATE=HOME/'.wx-rs'
+LABEL='gui/'+str(os.getuid())+'/ai.wechat.bridge'
+END=time.monotonic()+60
+CHANGED=False
+
+def remaining():
+    value=END-time.monotonic();require(value>0,'service repair deadline');return min(value,10)
+def run(argv,check=True):
+    p=subprocess.run(argv,stdin=subprocess.DEVNULL,capture_output=True,timeout=remaining(),env={'HOME':str(HOME),'LC_ALL':'C','PATH':'/usr/bin:/bin:/usr/sbin:/sbin'})
+    require(len(p.stdout)+len(p.stderr)<=4194304,'service utility output budget')
+    if check:require(p.returncode==0,'service utility refused')
+    return p
+
+def read(path,cap=1048576):
+    lib['regular'](path,cap);before=path.lstat()
+    require(before.st_uid==os.getuid() and not before.st_mode&0o022,'service file custody')
+    fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
+    with os.fdopen(fd,'rb') as f:
+        require(lib['retirement_stamp'](before)==lib['retirement_stamp'](os.fstat(f.fileno())),'service file replaced')
+        data=f.read(cap+1)
+        require(len(data)<=cap and lib['retirement_stamp'](before)==lib['retirement_stamp'](os.fstat(f.fileno())),'service file changed')
+    require(lib['retirement_stamp'](before)==lib['retirement_stamp'](path.lstat()),'service path changed')
+    return data
+
+def developer_directory_custody(path,metadata):
+    if not stat.S_ISDIR(metadata.st_mode) or stat.S_ISLNK(metadata.st_mode) or metadata.st_uid not in (0,os.getuid()):return False
+    if metadata.st_mode&0o002:return False
+    # macOS ships /Applications as root:admin 0775. This precise system
+    # ancestor is admin-managed; it is not a general writable-path exception.
+    if metadata.st_mode&0o020:
+        return path==Path('/Applications') and metadata.st_uid==0 and metadata.st_gid==80
+    return True
+
+def process_rows():
+    p=run(['/bin/ps','-axo','pid=,ppid=,lstart=,comm='])
+    rows={}
+    for line in p.stdout.decode('utf8').splitlines():
+        fields=line.strip().split(None,7);require(len(fields)==8,'service process inventory malformed')
+        pid,ppid=int(fields[0]),int(fields[1]);require(pid not in rows,'duplicate process');rows[pid]=(ppid,fields[7],' '.join(fields[2:7]))
+    require(0<len(rows)<=8192,'service process inventory budget');return rows
+
+def service_record():
+    p=run(['/bin/launchctl','print',LABEL],False)
+    if p.returncode!=0:return None
+    text=p.stdout.decode('utf8');fields={}
+    for key in ['program','pid']:
+        values=[line.strip().split(' = ',1)[1] for line in text.splitlines() if line.strip().startswith(key+' = ')]
+        require(len(values)==1,'service identity unavailable');fields[key]=values[0]
+    require(fields['pid'].isdigit(),'service PID malformed');return fields
+
+def wait_service_exit(record,allowed,caller=None):
+    # wechatd starts its own session. A normal launchd bootout can leave that
+    # authenticated child alive; request its ordinary SIGTERM shutdown once.
+    # Never signal an App/debugger, a replacement PID or a newly found child.
+    bridge=int(record['pid']);children={pid:row for pid,row in allowed.items()
+        if row[0]==bridge and Path(row[1]).name=='wechatd'}
+    signalled=set()
+    while True:
+        remaining();live=process_rows();job=service_record()
+        for pid,original in children.items():
+            current=live.get(pid)
+            if current is None or pid in signalled:continue
+            require(current[1:]==original[1:] and current[0] in (bridge,1),'original daemon identity changed during stop')
+            if bridge not in live and job is None:
+                require(process_rows().get(pid)==current,'original daemon changed before shutdown')
+                result=run(['/bin/kill','-TERM',str(pid)],False)
+                require(result.returncode==0 or pid not in process_rows(),'original daemon shutdown refused')
+                signalled.add(pid)
+        if job is None and not any(pid in live for pid in allowed if pid!=caller):return
+        time.sleep(.05)
+
+def accounts():
+    if not STATE.exists():return []
+    lib['private_directory'](STATE);children=list(STATE.iterdir());require(len(children)<=4096,'service account budget')
+    candidates=[STATE]+[p for p in children if p.is_dir() and not p.is_symlink()]
+    return [p for p in candidates if any((p/name).exists() for name in ['config.json','qt-navigation.lock',*lib['REGISTRIES']])]
+
+@contextlib.contextmanager
+def ownership_guard(active,allowed,names):
+    def quiet():
+        live=process_rows();watched=set(names)|{'wechat-use','debugserver'}
+        for pid,(parent,path,epoch) in live.items():
+            name=Path(path).name.strip('()')
+            if name in watched or name.startswith('lldb'):
+                require(pid in allowed and live[pid]==allowed[pid],'SDK owner/debugger activity prevents repair')
+    # Match exact process identities, never whitelist a process name or kill it.
+    quiet();lock_paths=[]
+    for account in accounts():
+        lib['private_directory'](account)
+        path=account/'qt-navigation.lock'
+        fd=os.open(path,os.O_RDWR|os.O_CREAT|os.O_NOFOLLOW|os.O_NONBLOCK|os.O_CLOEXEC,0o600)
+        with os.fdopen(fd,'r+b') as f:
+            m=os.fstat(fd)
+            require(stat.S_ISREG(m.st_mode) and m.st_nlink==1 and m.st_uid==os.getuid() and stat.S_IMODE(m.st_mode)==0o600,'service native lock custody')
+        lock_paths.append(path)
+    verifiers=[]
+    versions=SDK/'versions';members=list(versions.iterdir());require(len(members)<=8,'SDK generation budget')
+    for directory in members:
+        if directory.is_dir() and not directory.is_symlink():
+            try:
+                lib['load_package'](directory);verifiers.append(directory/'wechat-native-owner')
+            except (OSError,ValueError,RuntimeError):continue
+    require(active/'wechat-native-owner' in verifiers,'active owner verifier missing')
+    old_verify=lib['verify_closed']
+    def bounded_verify(locator,helpers):
+        for helper in helpers:
+            p=run([str(helper),'--verify-closed',str(locator)],False)
+            if p.returncode==0 and len(p.stdout)<=16384:
+                try:v=json.loads(p.stdout,object_pairs_hook=lib['strict_object'])
+                except (ValueError,UnicodeError):continue
+                if type(v)is dict and v.get('schema')=='wechat-native-owner-closure/v1' and v.get('ownership_closed') is True and v.get('app_task_terminal_verified') is False and v.get('retry_allowed') is False:return
+        raise lib['OwnerClosureUnknown']('original closure unavailable')
+    lib['verify_closed']=bounded_verify
+    old_quiet=lib['retirement_sdk_quiet'];lib['retirement_sdk_quiet']=quiet
+    stack=contextlib.ExitStack();retired=None
+    try:
+        try:lib['admission']([STATE],names,verifiers)
+        except lib['OwnerClosureUnknown']:
+            # Same-boot unknowns still refuse. This proves only a preboot
+            # target retirement; it does not invent cleanup or clear claims.
+            retired=lib['PrebootRetirement']([STATE],verifiers)
+            try:retired.acquire()
+            except Refused as original:
+                retired.close();retired=None
+                try:
+                    retired=lib['StoppedTargetRetirement']([STATE],verifiers,{pid:row[2] for pid,row in allowed.items()});retired.acquire()
+                except (Refused,OSError,ValueError):
+                    if retired is not None:retired.close()
+                    retired=None
+                    raise original
+        held={p for p,_,_ in retired.locks} if retired else set()
+        for path in lock_paths:
+            if path in held:continue
+            fd=os.open(path,os.O_RDWR|os.O_NOFOLLOW|os.O_NONBLOCK|os.O_CLOEXEC)
+            f=stack.enter_context(os.fdopen(fd,'r+b'));m=os.fstat(fd)
+            require(stat.S_ISREG(m.st_mode) and m.st_nlink==1 and m.st_uid==os.getuid() and stat.S_IMODE(m.st_mode)==0o600,'service native lock custody')
+            require(lib['retirement_stamp'](path.lstat())==lib['retirement_stamp'](m),'service lock changed')
+            fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        quiet()
+        if retired:retired.check()
+        else:lib['admission']([STATE],names,verifiers)
+        yield quiet
+    finally:
+        stack.close()
+        if retired:retired.close()
+        lib['retirement_sdk_quiet']=old_quiet
+        lib['verify_closed']=old_verify
+
+def legacy_pause():
+    global CHANGED
+    names=('wechat','wechatd','wechat-bridge','wechat-mcp','wechat-wechaty-gateway')
+    directory=HOME/'.local/bin';lib['private_directory'](directory)
+    files={};versions=set()
+    for name in names:
+        path=lib['legacy_source'](directory/name)
+        signature=run(['/usr/bin/codesign','-dvv',str(path)])
+        require(b'TeamIdentifier=6ZPXG4KVVS' in signature.stderr,'legacy signing team not recognized')
+        run(['/usr/bin/codesign','--verify','--strict',str(path)])
+        versions.add(lib['legacy_version'](path,name))
+        files[path]=lib['digest'](path)
+    require(len(versions)==1,'legacy versions differ')
+    record=service_record();require(record is not None and record['program']==str(directory/'wechat-bridge'),'one original legacy service required')
+    pid=int(record['pid']);rows=process_rows();allowed={}
+    require(pid in rows and rows[pid][1]==str(directory/'wechat-bridge'),'legacy running path differs')
+    allowed[pid]=rows[pid]
+    for child,entry in rows.items():
+        if entry[0]==pid:
+            require(entry[1]==str(directory/'wechatd'),'legacy child not recognized');allowed[child]=entry
+    # Physical loaded text must still be this signed, un-replaced old file.
+    def physical_text(pid,path):
+        output=run(['/usr/sbin/lsof','-a','-p',str(pid),'-d','txt','-F0fDin'])
+        require(not output.stderr,'legacy text inventory incomplete')
+        inode=None;device=None;found=0;m=path.stat()
+        for record in output.stdout.split(b'\0'):
+            record=record.lstrip(b'\n')
+            if record.startswith(b'f'):inode=None;device=None
+            elif record.startswith(b'i'):inode=int(record[1:])
+            elif record.startswith(b'D'):device=int(record[1:],16)
+            elif record.startswith(b'n') and os.fsdecode(record[1:])==str(path):
+                require(inode==m.st_ino and device==m.st_dev,'legacy loaded executable was replaced');found+=1
+        require(found==1,'legacy loaded text identity unavailable')
+    def quiet(require_loaded=True):
+        current=process_rows()
+        for process,(parent,path,epoch) in current.items():
+            name=Path(path).name.strip('()')
+            if name in set(names)|{'wechat-use','wechat-native-owner','wechat-snapshot-validator','debugserver'} or name.startswith('lldb'):
+                require(process in allowed and current[process]==allowed[process],'other SDK or debugger activity prevents legacy pause')
+        for process,entry in allowed.items():
+            if require_loaded:
+                require(current.get(process)==entry,'legacy original process changed before stop')
+                physical_text(process,Path(entry[1]))
+            else:
+                # wait_service_exit already drained both original processes.
+                # An exited PID has no text mapping to inspect; require absence
+                # and retain the independent no-new-SDK/debugger checks above.
+                require(process not in current,'legacy original process remains after stop')
+        for path,sha in files.items():require(lib['digest'](path)==sha,'legacy executable changed')
+        # A missing registry does not certify an old native task. Legacy pause
+        # is limited to no debugger processes and no stopped/traced WeChat.
+        for process,(_,path,_) in current.items():
+            if path.endswith('/Contents/MacOS/WeChat'):
+                state=run(['/bin/ps','-p',str(process),'-o','stat=']).stdout.decode().strip()
+                require(state and state[0] in 'RSI' and not set(state)&set('XTZ'),'WeChat is stopped or traced')
+    lib['private_directory'](STATE,create=True)
+    with contextlib.ExitStack() as stack:
+        for account in accounts():
+            lib['private_directory'](account)
+            for registry in lib['REGISTRIES']:
+                path=account/registry
+                if path.exists():
+                    lib['private_directory'](path)
+                    require(next(path.iterdir(),None) is None,'legacy owner evidence requires original reconciliation')
+            path=account/'qt-navigation.lock';fd=os.open(path,os.O_RDWR|os.O_CREAT|os.O_NOFOLLOW|os.O_NONBLOCK|os.O_CLOEXEC,0o600)
+            f=stack.enter_context(os.fdopen(fd,'r+b'));m=os.fstat(fd)
+            require(stat.S_ISREG(m.st_mode) and m.st_nlink==1 and m.st_uid==os.getuid() and stat.S_IMODE(m.st_mode)==0o600,'legacy lock custody')
+            fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
+            require(lib['retirement_stamp'](path.lstat())==lib['retirement_stamp'](m),'legacy lock replaced')
+        quiet();require(service_record()==record,'legacy service changed')
+        CHANGED=True;run(['/bin/launchctl','bootout',LABEL])
+        wait_service_exit(record,allowed);quiet(False)
+    return {'schema':'wechat-use/setup-service-result/v1','status':'legacy_service_stopped','changed':True,'ownership_closed':False,'retry_allowed':False,'app_task_terminal_verified':False}
+
+@contextlib.contextmanager
+def installation_guard():
+    lib['private_directory'](SDK,create=True)
+    path=SDK/'install.lock'
+    fd=os.open(path,os.O_RDWR|os.O_CREAT|os.O_NOFOLLOW|os.O_NONBLOCK|os.O_CLOEXEC,0o600)
+    with os.fdopen(fd,'r+b') as f:
+        m=os.fstat(fd)
+        require(stat.S_ISREG(m.st_mode) and m.st_nlink==1 and m.st_uid==os.getuid() and stat.S_IMODE(m.st_mode)==0o600,'service install lock custody')
+        fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        require(lib['retirement_stamp'](path.lstat())==lib['retirement_stamp'](m),'service install lock changed')
+        yield
+
+def repair(operation="repair"):
+    global CHANGED
+    require(operation in ("repair","pause"),"service operation")
+    lib['private_directory'](SDK)
+    state=lib['read_state'](SDK)
+    if not state or not state.get('current'):
+        require(operation=='pause','active atomic SDK required')
+        return legacy_pause()
+    activation=read(SDK/'activation.json',4096)
+    generation=state['current'];require(re.fullmatch(r'g-[a-f0-9]{40}-[a-f0-9]{16}',generation),'active SDK identity')
+    active=SDK/'versions'/generation
+    names,manifest,_=lib['load_package'](active)
+    require(manifest['sdkAbi']=='wechat-use/native-context/v1','service SDK ABI differs')
+    helper_version='@WECHAT_SETUP_VERSION_RUNTIME@'
+    bridge=active/'wechat-bridge'
+    destination=HOME/'Library/LaunchAgents/ai.wechat.bridge.plist'
+    parent=destination.parent
+    lib['private_directory'](parent)
+    before=read(destination) if destination.exists() else None
+    record=service_record();rows=process_rows();allowed={}
+    lib['private_directory'](STATE,create=True)
+    programs={str(HOME/'.local/bin/wechat-bridge'),str(SDK/'bin/wechat-bridge'),str(bridge)}
+    def trusted_bridge(path):
+        if path.name!='wechat-bridge' or path.parent.parent!=SDK/'versions':return False
+        try:lib['load_package'](path.parent);return True
+        except (OSError,ValueError,RuntimeError):return False
+    # Only a known SDK launcher may be replaced. Existing command arguments and
+    # non-secret environment settings are retained; the primary is never bound.
+    if before:
+        config=plistlib.loads(before)
+        argv=config.get('ProgramArguments');require(config.get('Label')=='ai.wechat.bridge' and type(argv)is list and 1<=len(argv)<=16 and all(type(v)is str for v in argv),'service plist domain')
+        old=Path(argv[0]);require(str(old) in programs or trusted_bridge(old),'foreign service program')
+        if old.name=='wechat-bridge' and old.parent in (HOME/'.local/bin',SDK/'bin'):
+            route=read(old,65536)
+            require(route==lib['launcher'](SDK,'wechat-bridge') or lib['route_hashes'](SDK).get(str(old))==hashlib.sha256(route).hexdigest(),'service launcher differs from SDK producer')
+    else:
+        config={'Label':'ai.wechat.bridge','ProgramArguments':[str(bridge)],'RunAtLoad':True,'KeepAlive':True,'ThrottleInterval':10,
+          'StandardOutPath':str(STATE/'wechat-bridge.log'),'StandardErrorPath':str(STATE/'wechat-bridge.err.log')}
+    env=config.get('EnvironmentVariables',{})
+    require(type(env)is dict and set(env)<=set(['HOME','PATH','RUST_LOG','WECHAT_TARGET_BUNDLE_ID','DEVELOPER_DIR']),'service environment not recognized')
+    require(env.get('HOME',str(HOME))==str(HOME) and env.get('WECHAT_TARGET_BUNDLE_ID','com.tencent.xinWeChat419WechatUse')=='com.tencent.xinWeChat419WechatUse','service account selection mismatch')
+    if 'DEVELOPER_DIR' in env:
+        developer=Path(env['DEVELOPER_DIR']);require(developer.is_absolute() and (str(developer).endswith('.app/Contents/Developer') or developer==Path('/Library/Developer/CommandLineTools')),'developer tools path shape')
+        require(developer.resolve()==developer and developer.is_dir(),'developer tools alias')
+        for ancestor in (developer,*developer.parents):
+            require(developer_directory_custody(ancestor,ancestor.lstat()),'developer tools custody')
+    if record:
+        require(record['program']==config['ProgramArguments'][0],'launchd/plist disagreement')
+        pid=int(record['pid']);require(pid in rows and trusted_bridge(Path(rows[pid][1])),'running service is not an authenticated SDK')
+        allowed[pid]=rows[pid]
+        for child,entry in rows.items():
+            if entry[0]==pid:
+                require(entry[1]==str(Path(rows[pid][1]).parent/'wechatd'),'service has an unrecognized live child');allowed[child]=entry
+    # The original signed CLI parent may request its own repair. Other SDK CLIs
+    # stay an exclusion; this is not an arbitrary caller-supplied PID allowlist.
+    parent_pid=os.getppid()
+    if parent_pid in rows and rows[parent_pid][1]==str(active/'wechat'):allowed[parent_pid]=rows[parent_pid]
+    config['ProgramArguments'][0]=str(bridge)
+    config['EnvironmentVariables']={**env,'HOME':str(HOME),'WECHAT_TARGET_BUNDLE_ID':'com.tencent.xinWeChat419WechatUse'}
+    changed=False
+    with ownership_guard(active,allowed,names) as quiet:
+        require(read(SDK/'activation.json',4096)==activation,'SDK changed during service repair')
+        require((read(destination) if destination.exists() else None)==before,'service plist changed')
+        if record:
+            require(service_record()==record,'service changed before stop')
+            CHANGED=True
+            run(['/bin/launchctl','bootout',LABEL]);changed=True
+            wait_service_exit(record,allowed,parent_pid);quiet()
+        if operation=='pause':return {'schema':'wechat-use/setup-service-result/v1','status':'service_stopped','changed':changed,'permissions_verified':False,'data_verified':False}
+        for account in accounts():
+            if account!=STATE:
+                m=account.lstat();require(m.st_uid==os.getuid() and not m.st_mode&0o022,'account state custody')
+                os.chmod(account,0o700,follow_symlinks=False)
+        temporary=parent/('.wechat-bridge-'+lib['uuid'].uuid4().hex+'.plist')
+        fd=os.open(temporary,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
+        with os.fdopen(fd,'wb') as f:f.write(plistlib.dumps(config));f.flush();os.fsync(f.fileno())
+        CHANGED=True
+        os.replace(temporary,destination);changed=True
+        fd=os.open(parent,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+        try:os.fsync(fd)
+        finally:os.close(fd)
+        run(['/bin/launchctl','bootstrap','gui/'+str(os.getuid()),str(destination)])
+        while True:
+            current=service_record()
+            if current and current['program']==str(bridge):break
+            remaining();time.sleep(.05)
+    return {'schema':'wechat-use/setup-service-result/v1','status':'service_started','changed':changed,'permissions_verified':False,'data_verified':False}
+
+if __name__=='__main__':
+    try:
+        with installation_guard():print(json.dumps(repair(sys.argv[1])))
+    except Exception:
+        # No unbounded/private original errors, no process fallback or retry.
+        print(json.dumps({'schema':'wechat-use/setup-service-result/v1','status':'blocked','code':'service_repair_not_verified','changed':'unknown' if CHANGED else False}),file=sys.stderr);sys.exit(69)
+PYSERVICE
+    ;;
+  *) exit 64 ;;
+esac

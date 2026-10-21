@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>微信工具设置遇到问题</title>
+<style>:root{--fg:#24282c;--accent:#087b61;--border:#dce2e0;--bg:#f5f8f6}body{max-width:900px;margin:40px auto;padding:0 24px;font:16px/1.7 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;color:var(--fg)}header{border-bottom:2px solid var(--accent)}h1{font-size:28px}h2{font-size:21px}table{border-collapse:collapse;width:100%}th,td{text-align:left;vertical-align:top;padding:12px;border-bottom:1px solid var(--border)}aside{background:var(--bg);padding:16px}a{color:var(--accent)}</style></head>
+<body><header><h1>设置遇到问题，不用自己查环境</h1><p>以下是 v1.18.7 候选版的处理方式，尚未正式发布。当前 v1.18.6 不包含这些改进，请勿反复重装以寻找新入口。</p><p>v1.18.7 的所有设置页面都提供“复制诊断信息”，包括正在等待的页面。系统和工具版本由窗口采集，无需运行诊断命令。</p></header>
+<section><h2>按窗口提示继续</h2><table><thead><tr><th>问题代码</th><th>处理入口</th></tr></thead><tbody>
+<tr><td>WXS-DEVTOOLS / WXS-I-DEVTOOLS</td><td>点击“授权并继续”，由本人在 macOS 弹窗中确认开启系统级开发工具授权，随后工具自动继续。</td></tr>
+<tr><td>WXS-PERMISSIONS</td><td>按窗口提示开启对应工具权限；系统列表缺项时拖入窗口提供的工具文件。</td></tr>
+<tr><td>WXS-I-ACCESS / WXS-I-KEYS / WXS-I-UNKNOWN</td><td>保持专用微信登录，复制诊断信息反馈，不反复重装或清空授权。</td></tr>
+<tr><td>WXS-SERVICE</td><td>工具会先尝试恢复后台；仍未恢复时，复制诊断信息反馈。</td></tr>
+<tr><td>WXS-UI-…</td><td>设置服务尚未启动或连接中断。窗口仍能复制基本环境诊断，不需要先运行命令。</td></tr>
+</tbody></table></section>
+<section><h2>如何反馈</h2><p>截图保留完整的问题代码，或点击“复制诊断信息”后粘贴给协助处理的人。诊断包括系统版本、工具及专用微信版本、后台和权限状态，以及可识别的失败类别。初始化错误记录也会保存在本机。</p><aside>诊断不包含聊天内容、激活码或数据库密钥，不会自动上传。即使设置服务没能启动，窗口本身仍能提供系统版本和连接状态。</aside></section>
+<section><h2>仍在使用 v1.18.6</h2><p>请先保持专用微信登录和现有数据。待 v1.18.7 正式发布后，原错误页的“修复安装”按钮可用于升级，随后按具体提示继续，无需另输命令。</p><p><a href="https://github.com/leeguooooo/wechat-use/releases">正式版本</a> · <a href="setup.html">设置指南</a></p></section></body></html>

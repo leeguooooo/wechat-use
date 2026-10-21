@@ -1,0 +1,27 @@
+bin/
+*.pyc
+__pycache__/
+.DS_Store
+
+# session-private (must NEVER appear in public repo)
+.omx/
+**/node_modules/
+.preflight.bak
+
+# release artifacts — belong on GitHub Releases, NEVER in git
+*.tar.gz
+*.tar
+*.zip
+*.dmg
+SHA256SUMS
+SHA256SUMS.txt
+wechat-v*-darwin-*
+wechat-v*-linux-*
+
+# binary artifacts that install.sh extracts to the repo root
+/wechat
+/wechatd
+/wechat-bridge
+/wechat-wechaty-gateway
+/wechat-inspect-msg
+/wechat-key-scan
