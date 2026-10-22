@@ -139,6 +139,37 @@ def wait_service_exit(record,allowed,caller=None,orphans=()):
         if job is None and not any(pid in live for pid in allowed if pid!=caller):return
         time.sleep(.05)
 
+def setup_callers(active,rows,parent_pid):
+    # Only the authenticated caller and its exact GUI launcher chain are idle
+    # setup participants. Never admit siblings or arbitrary CLI ancestors.
+    cli=str(active/'wechat')
+    if parent_pid not in rows or rows[parent_pid][1]!=cli:return {}
+    callers={parent_pid:rows[parent_pid]}
+    ui_pid=rows[parent_pid][0]
+    ui=str(active/'WechatUseSetup.app/Contents/MacOS/wechat-setup-ui')
+    if ui_pid not in rows or rows[ui_pid][1]!=ui:return callers
+    def command(pid):
+        return run(['/bin/ps','-p',str(pid),'-o','args=']).stdout.decode('utf8').strip()
+    require(command(parent_pid) in (cli+' setup --stdio',cli+' setup --stdio --skip-verify'),
+        'setup UI child command differs')
+    outer_pid=rows[ui_pid][0]
+    if outer_pid in rows and rows[outer_pid][1]==cli:
+        require(command(outer_pid) in (cli+' init',cli+' setup',cli+' setup --skip-verify'),
+            'setup launcher command differs')
+        callers[outer_pid]=rows[outer_pid]
+    return callers
+
+def owner_verifiers(active):
+    verifiers=[]
+    versions=SDK/'versions';members=list(versions.iterdir());require(len(members)<=64,'SDK generation budget')
+    for directory in members:
+        if directory.is_dir() and not directory.is_symlink():
+            try:
+                lib['load_package'](directory);verifiers.append(directory/'wechat-native-owner')
+            except (OSError,ValueError,RuntimeError):continue
+    require(active/'wechat-native-owner' in verifiers,'active owner verifier missing')
+    return verifiers
+
 def accounts():
     if not STATE.exists():return []
     lib['private_directory'](STATE);children=list(STATE.iterdir());require(len(children)<=4096,'service account budget')
@@ -163,14 +194,7 @@ def ownership_guard(active,allowed,names):
             m=os.fstat(fd)
             require(stat.S_ISREG(m.st_mode) and m.st_nlink==1 and m.st_uid==os.getuid() and stat.S_IMODE(m.st_mode)==0o600,'service native lock custody')
         lock_paths.append(path)
-    verifiers=[]
-    versions=SDK/'versions';members=list(versions.iterdir());require(len(members)<=8,'SDK generation budget')
-    for directory in members:
-        if directory.is_dir() and not directory.is_symlink():
-            try:
-                lib['load_package'](directory);verifiers.append(directory/'wechat-native-owner')
-            except (OSError,ValueError,RuntimeError):continue
-    require(active/'wechat-native-owner' in verifiers,'active owner verifier missing')
+    verifiers=owner_verifiers(active)
     old_verify=lib['verify_closed']
     def bounded_verify(locator,helpers):
         for helper in helpers:
@@ -357,10 +381,9 @@ def repair(operation="repair"):
                 require(entry[1]==str(Path(rows[pid][1]).parent/'wechatd'),'service has an unrecognized live child');allowed[child]=entry
     orphan=orphan_identity(rows,Path(rows[int(record['pid'])][1]) if record else bridge)
     if orphan:allowed[orphan[0]]=orphan[1]
-    # The original signed CLI parent may request its own repair. Other SDK CLIs
-    # stay an exclusion; this is not an arbitrary caller-supplied PID allowlist.
+    service_processes=dict(allowed)
     parent_pid=os.getppid()
-    if parent_pid in rows and rows[parent_pid][1]==str(active/'wechat'):allowed[parent_pid]=rows[parent_pid]
+    allowed.update(setup_callers(active,rows,parent_pid))
     config['ProgramArguments'][0]=str(bridge)
     config['EnvironmentVariables']={**env,'HOME':str(HOME),'WECHAT_TARGET_BUNDLE_ID':'com.tencent.xinWeChat419WechatUse'}
     changed=False
@@ -375,7 +398,7 @@ def repair(operation="repair"):
             require(service_record()==record,'service changed before stop')
             CHANGED=True
             run(['/bin/launchctl','bootout',LABEL]);changed=True
-            wait_service_exit(record,allowed,parent_pid,(orphan[0],) if orphan else ());quiet()
+            wait_service_exit(record,service_processes,orphans=(orphan[0],) if orphan else ());quiet()
         elif orphan:
             drain_orphan(orphan,quiet);changed=True
         if operation=='pause':return {'schema':'wechat-use/setup-service-result/v1','status':'service_stopped','changed':changed,'permissions_verified':False,'data_verified':False}
