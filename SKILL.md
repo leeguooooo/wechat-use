@@ -3,13 +3,13 @@ name: wechat-use
 description: "Use WeChat on macOS Apple Silicon or Windows x64: query sessions, contacts and history, listen for messages, and send authorized text. Select the host-specific backend first. Windows has a standalone experimental CLI/MCP package with no system Python requirement; macOS uses the managed WeChat 4.1.9 clone and supports HTTP Bridge/Wechaty."
 metadata:
   author: leeguooooo
-  version: "1.19.1"
+  version: "1.19.2"
   platform: macOS-arm64, Windows-x64-experimental
 ---
 
 # WechatUse — select the host platform first
 
-This skill supports **macOS Apple Silicon and experimental Windows x64**. Never tell a Windows user that WechatUse has no Windows version. Plugin/skill version 1.19.1 is metadata; the runtime releases are independently versioned (macOS v1.19.1, Windows windows-v0.1.0).
+This skill supports **macOS Apple Silicon and experimental Windows x64**. Never tell a Windows user that WechatUse has no Windows version. Plugin/skill version 1.19.2 is metadata; the runtime releases are independently versioned (macOS v1.19.2, Windows windows-v0.1.0).
 
 - **Windows:** follow only the Windows section below. Do not apply macOS requirements, activation/setup commands, LLDB, Accessibility, shell installer or managed 4.1.9 instructions.
 - **macOS:** skip the Windows section and follow the macOS section.
@@ -146,6 +146,8 @@ wechat-use send --image /absolute/path/image.png --recipient '收件人' --json
 发送前确认接收者；正常操作不激活、抬起或切换微信窗口。`submitted_unconfirmed` / `status_unknown` 不是失败，也不是送达。保留原 request ID，先查询原回执和精确历史，不换 ID 重发；发送者服务器记录不等于对方已读或接收文件字节一致。
 
 1.19.1 可在设置窗口点击“核对原请求（不重发）”，或运行 `wechat-use send-receipt --request-id ORIGINAL_ID --expected-account ORIGINAL_ACCOUNT --json`。必须沿用原请求保存的精确账号；只连接已有后台，查询失败也不启动后台或重发。
+
+1.19.2 起，`doctor --json` 的 `submission_ready` 表示当前接口可提交；`send_ready` 和 `send_delivery_verified` 不因此变为已验证。强送达未验证不会单独阻断环境自检，也不要据此重发未知请求。
 
 设置提示缺少系统授权时，点击“授权并继续”，由本人确认 macOS 管理员弹窗，无需运行终端命令。取消后可以稍后继续；不要反复修复安装。
 
