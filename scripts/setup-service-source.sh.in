@@ -8,7 +8,7 @@ case "$1" in
   --version) printf 'wechat-setup-service %s\n' "$WECHAT_SETUP_VERSION" ;;
   repair|pause)
     exec /usr/bin/python3 -I - "$1" <<'PYSERVICE'
-import base64, contextlib, fcntl, hashlib, json, os, plistlib, re, stat, subprocess, sys, time
+import base64, contextlib, fcntl, hashlib, json, os, plistlib, re, socket, stat, subprocess, sys, time
 from pathlib import Path
 # Library bytes come from the canonical SDK-only installer, embedded at build.
 lib={'__name__':'service_sdk_inventory'}
@@ -64,12 +64,66 @@ def service_record():
         require(len(values)==1,'service identity unavailable');fields[key]=values[0]
     require(fields['pid'].isdigit(),'service PID malformed');return fields
 
-def wait_service_exit(record,allowed,caller=None):
+def orphan_identity(rows,bridge):
+    # Only the dedicated clone's one authenticated SDK daemon can be recovered.
+    found=[(pid,row) for pid,row in rows.items() if Path(row[1]).name=='wechatd' and row[0]==1]
+    if not found:return None
+    require(len(found)==1,'multiple orphan daemons')
+    pid,row=found[0];binary=Path(row[1])
+    require(binary==bridge.parent/'wechatd','orphan SDK differs from registered service')
+    lib['load_package'](binary.parent)
+    run(['/usr/bin/codesign','--verify','--strict',str(binary)])
+    signature=run(['/usr/bin/codesign','-dvv',str(binary)])
+    require(b'TeamIdentifier=6ZPXG4KVVS' in signature.stderr,'orphan signing identity')
+    uid=run(['/bin/ps','-p',str(pid),'-o','uid=']).stdout.decode().strip()
+    require(uid==str(os.getuid()),'orphan process user')
+    # Require physical loaded bytes, not a replaced on-disk executable.
+    output=run(['/usr/sbin/lsof','-a','-p',str(pid),'-d','txt','-F0fDin'])
+    require(not output.stderr,'orphan text inventory incomplete')
+    inode=device=None;matched=0;m=binary.stat()
+    for field in output.stdout.split(b'\0'):
+        field=field.lstrip(b'\n')
+        if field.startswith(b'f'):inode=device=None
+        elif field.startswith(b'i'):inode=int(field[1:])
+        elif field.startswith(b'D'):device=int(field[1:],16)
+        elif field.startswith(b'n') and os.fsdecode(field[1:])==str(binary):
+            require((inode,device)==(m.st_ino,m.st_dev),'orphan loaded text replaced');matched+=1
+    require(matched==1,'orphan loaded text unavailable')
+    base=Path('/private/tmp')/('wechatd-'+str(os.getuid())+'-com_tencent_xinWeChat419WechatUse')
+    pidfile=Path(str(base)+'.pid');sock=Path(str(base)+'.sock')
+    require(read(pidfile,64).decode().strip()==str(pid),'orphan PID file mismatch')
+    sm=sock.lstat()
+    require(stat.S_ISSOCK(sm.st_mode) and sm.st_uid==os.getuid() and not sm.st_mode&0o077,'orphan socket custody')
+    with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as client:
+        client.settimeout(remaining());client.connect(str(sock))
+        client.sendall(b'{"id":1,"method":"ping","params":{}}\n')
+        response=b''
+        while not response.endswith(b'\n'):
+            chunk=client.recv(4096);require(chunk and len(response)+len(chunk)<=16384,'orphan ping budget');response+=chunk
+    value=json.loads(response,object_pairs_hook=lib['strict_object'])
+    require(value.get('id')==1 and value.get('result',{}).get('pid')==pid,'orphan socket identity')
+    require(process_rows().get(pid)==row,'orphan process epoch changed')
+    return pid,row
+
+def drain_orphan(identity,quiet):
+    global CHANGED
+    if identity is None:return
+    pid,row=identity
+    quiet();require(process_rows().get(pid)==row,'orphan changed before graceful drain')
+    CHANGED=True
+    result=run(['/bin/kill','-TERM',str(pid)],False)
+    require(result.returncode==0 or pid not in process_rows(),'orphan graceful shutdown refused')
+    while pid in process_rows():
+        require(process_rows().get(pid)==row,'orphan PID reused during drain')
+        remaining();time.sleep(.05)
+    quiet()
+
+def wait_service_exit(record,allowed,caller=None,orphans=()):
     # wechatd starts its own session. A normal launchd bootout can leave that
     # authenticated child alive; request its ordinary SIGTERM shutdown once.
     # Never signal an App/debugger, a replacement PID or a newly found child.
     bridge=int(record['pid']);children={pid:row for pid,row in allowed.items()
-        if row[0]==bridge and Path(row[1]).name=='wechatd'}
+        if (row[0]==bridge or pid in orphans) and Path(row[1]).name=='wechatd'}
     signalled=set()
     while True:
         remaining();live=process_rows();job=service_record()
@@ -301,6 +355,8 @@ def repair(operation="repair"):
         for child,entry in rows.items():
             if entry[0]==pid:
                 require(entry[1]==str(Path(rows[pid][1]).parent/'wechatd'),'service has an unrecognized live child');allowed[child]=entry
+    orphan=orphan_identity(rows,Path(rows[int(record['pid'])][1]) if record else bridge)
+    if orphan:allowed[orphan[0]]=orphan[1]
     # The original signed CLI parent may request its own repair. Other SDK CLIs
     # stay an exclusion; this is not an arbitrary caller-supplied PID allowlist.
     parent_pid=os.getppid()
@@ -311,11 +367,17 @@ def repair(operation="repair"):
     with ownership_guard(active,allowed,names) as quiet:
         require(read(SDK/'activation.json',4096)==activation,'SDK changed during service repair')
         require((read(destination) if destination.exists() else None)==before,'service plist changed')
+        # Locks, all original-owner closures, SDK bytes and no debugger/App
+        # interference have been proved by ownership_guard before any signal.
+        if orphan:
+            require(orphan_identity(process_rows(),Path(orphan[1][1]).parent/'wechat-bridge')==orphan,'orphan identity changed under lock')
         if record:
             require(service_record()==record,'service changed before stop')
             CHANGED=True
             run(['/bin/launchctl','bootout',LABEL]);changed=True
-            wait_service_exit(record,allowed,parent_pid);quiet()
+            wait_service_exit(record,allowed,parent_pid,(orphan[0],) if orphan else ());quiet()
+        elif orphan:
+            drain_orphan(orphan,quiet);changed=True
         if operation=='pause':return {'schema':'wechat-use/setup-service-result/v1','status':'service_stopped','changed':changed,'permissions_verified':False,'data_verified':False}
         for account in accounts():
             if account!=STATE:
