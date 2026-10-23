@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Atomic SDK installer. No clone/App/service/config changes.
+# Atomic SDK installer and verified setup shortcut. No WeChat/service/config changes.
 set -euo pipefail
 command -v python3 >/dev/null || { echo 'Python 3.9+ is required for SDK verification.' >&2; exit 2; }
 exec python3 - "$@" <<'PYINSTALL'
@@ -628,7 +628,7 @@ else:
  path=root/'versions'/generation/NAME
 if NAME=='wechat' and sys.argv[1:2]==['upgrade']:
  if generation is None:raise SystemExit('SDK upgrade unavailable before activation; rerun SDK installer')
- parser=argparse.ArgumentParser(prog='wechat-use upgrade',description='Atomic SDK-only upgrade; retains App, services and user data')
+ parser=argparse.ArgumentParser(prog='wechat-use upgrade',description='Atomic SDK upgrade; refreshes setup shortcut, retains WeChat, services and user data')
  group=parser.add_mutually_exclusive_group()
  group.add_argument('--tag');group.add_argument('--from-directory');group.add_argument('--rollback',action='store_true')
  parser.add_argument('--state-root',action='append',default=[])
@@ -643,7 +643,7 @@ if NAME=='wechat' and sys.argv[1:2]==['upgrade']:
   current=record(directory/'BUILD-MANIFEST.json',65536).get('version')
   if type(current)is not str or not re.fullmatch(r'[0-9]+\\.[0-9]+\\.[0-9]+',current):raise SystemExit('SDK current version unavailable')
   endpoint='tags/'+options.tag if options.tag else 'latest'
-  response=subprocess.run(['curl','-fsSL','--max-time','10','https://api.github.com/repos/leeguooooo/wechat-skill/releases/'+endpoint],stdin=subprocess.DEVNULL,capture_output=True,check=False)
+  response=subprocess.run(['curl','-fsSL','--max-time','10','https://api.github.com/repos/leeguooooo/wechat-use/releases/'+endpoint],stdin=subprocess.DEVNULL,capture_output=True,check=False)
   if response.returncode or len(response.stdout)>1048576:raise SystemExit('SDK release check unavailable; installation unchanged')
   latest=json.loads(response.stdout).get('tag_name')
   if type(latest)is not str or not re.fullmatch(r'v[0-9]+\\.[0-9]+\\.[0-9]+',latest):raise SystemExit('SDK release metadata invalid')
@@ -887,15 +887,118 @@ def transaction(root,package,state_roots,rollback=False,command_directory=None):
         allow_preboot=version is not None and tuple(map(int,version.groups()))>=(1,18,19)
         return activate(root,generation,names,state_roots,command_directory,allow_preboot)
 
+
+def trusted_setup_app(path):
+    path=private_directory(path)
+    members=list(path.rglob('*'));require(len(members)<=256,'setup app inventory bound')
+    for member in members:
+        require(not member.is_symlink(),'setup app alias refused')
+        if member.is_dir():private_directory(member)
+        else:regular(member,16777216)
+    requirement='anchor apple generic and certificate leaf[subject.OU] = "6ZPXG4KVVS" and identifier "ai.wechatskill.setup"'
+    result=subprocess.run(['/usr/bin/codesign','--verify','--strict','-R',requirement,str(path)],capture_output=True,timeout=10)
+    require(result.returncode==0,'setup app signing identity refused')
+    return path
+
+def swap_setup_contents(left,right):
+    # Atomic exchange preserves the App root inode used by Finder/Dock bookmarks.
+    import ctypes
+    library=ctypes.CDLL(None,use_errno=True)
+    if sys.platform=='darwin':
+        call=library.renameatx_np
+        call.argtypes=[ctypes.c_int,ctypes.c_char_p,ctypes.c_int,ctypes.c_char_p,ctypes.c_uint]
+        result=call(-2,os.fsencode(left),-2,os.fsencode(right),2) # RENAME_SWAP
+    else:
+        # Linux fixture runner only; the distributed installer requires macOS.
+        call=library.renameat2
+        call.argtypes=[ctypes.c_int,ctypes.c_char_p,ctypes.c_int,ctypes.c_char_p,ctypes.c_uint]
+        result=call(-100,os.fsencode(left),-100,os.fsencode(right),2)
+    if result:raise OSError(ctypes.get_errno(),'setup contents exchange refused')
+
+def refresh_setup_entry(root,generation,applications):
+    root=private_directory(root);target=root/'versions'/generation/SETUP_APP
+    if not target.exists():return 'not_in_package'
+    fd=os.open(root/'install.lock',os.O_RDWR|os.O_NOFOLLOW|os.O_NONBLOCK)
+    with os.fdopen(fd,'r+b') as lock:
+        m=os.fstat(lock.fileno())
+        require(stat.S_ISREG(m.st_mode) and m.st_nlink==1 and m.st_uid==os.geteuid() and stat.S_IMODE(m.st_mode)==0o600,'setup route lock custody')
+        try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        except BlockingIOError:raise Refused('setup entry activation busy') from None
+        require(read_state(root)['current']==generation,'setup entry activation changed')
+        load_package(target.parent);trusted_setup_app(target)
+        applications=private_directory(applications,create=True)
+        preferred=applications/'微信工具设置.app';legacy=applications/SETUP_APP
+        existing=[]
+        for path in [preferred,legacy]:
+            if not os.path.lexists(path):continue
+            before=path.lstat();require(before.st_uid==os.geteuid(),'setup entry owner refused')
+            if path.is_symlink():
+                resolved=path.resolve(strict=True)
+                require(resolved.name==SETUP_APP and resolved.parent.parent==root/'versions','unknown setup alias retained')
+                load_package(resolved.parent);trusted_setup_app(resolved)
+            else:
+                trusted_setup_app(path);private_directory(path/'Contents')
+            existing.append((path,retirement_stamp(before)))
+        observed=subprocess.run(['/bin/ps','-axo','pid=,comm='],capture_output=True,text=True,timeout=3)
+        require(observed.returncode==0 and not observed.stderr and len(observed.stdout)<=4194304,'setup process inventory unavailable')
+        for line in observed.stdout.splitlines():
+            fields=line.strip().split(None,1);require(len(fields)==2 and fields[0].isdigit(),'setup process inventory malformed')
+            require(not any(fields[1].startswith(str(path)+'/') for path,_ in existing),'old setup window is running')
+        backups=private_directory(applications/'.wechat-use-setup-backups',create=True)
+        backup=backups/uuid.uuid4().hex;backup.mkdir(mode=0o700)
+        plans=[];applied=[];installed_stamps={}
+        try:
+            for path,before in existing or [(preferred,None)]:
+                staged=backup/path.name
+                shutil.copytree(target,staged,symlinks=False);trusted_setup_app(staged)
+                plans.append((path,before,staged))
+            for path,before,staged in plans:
+                if before is None:
+                    require(not os.path.lexists(path),'setup entry appeared')
+                    # renameatx_np(RENAME_EXCL) would also be possible; reserve the
+                    # root first so a concurrent unknown entry is never replaced.
+                    path.mkdir(mode=0o700)
+                    try:os.rename(staged/'Contents',path/'Contents')
+                    except BaseException:path.rmdir();raise
+                    applied.append(('new',path,staged,None))
+                else:
+                    require(retirement_stamp(path.lstat())==before,'setup entry changed')
+                    if path.is_symlink():
+                        saved=backup/(path.name+'.alias');os.rename(path,saved)
+                        try:os.rename(staged,path)
+                        except BaseException:os.rename(saved,path);raise
+                        applied.append(('alias',path,staged,saved))
+                    else:
+                        contents=retirement_stamp((path/'Contents').lstat())
+                        swap_setup_contents(path/'Contents',staged/'Contents')
+                        applied.append(('swap',path,staged,contents))
+                installed_stamps[path]=(retirement_stamp(path.lstat()),retirement_stamp((path/'Contents').lstat()))
+                trusted_setup_app(path)
+            directory=os.open(applications,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+            try:os.fsync(directory)
+            finally:os.close(directory)
+        except BaseException:
+            for kind,path,staged,saved in reversed(applied):
+                # An external change is retained for manual recovery. Never
+                # exchange unknown new contents into the rollback archive.
+                expected=installed_stamps.get(path)
+                require(expected is not None and (retirement_stamp(path.lstat()),retirement_stamp((path/'Contents').lstat()))==expected,
+                    'setup entry rollback unknown; backups retained')
+                if kind=='swap':swap_setup_contents(path/'Contents',staged/'Contents')
+                elif kind=='new':os.rename(path/'Contents',staged/'Contents');path.rmdir()
+                else:os.rename(path,staged);os.rename(saved,path)
+            raise
+        return 'updated'
+
 def download_package(tag,directory):
-    base='https://github.com/leeguooooo/wechat-skill/releases/'
+    base='https://github.com/leeguooooo/wechat-use/releases/'
     if not tag:
-        raw=subprocess.check_output(['curl','-fsSL','https://api.github.com/repos/leeguooooo/wechat-skill/releases/latest'],timeout=60)
+        raw=subprocess.check_output(['curl','-fsSL','https://api.github.com/repos/leeguooooo/wechat-use/releases/latest'],timeout=60)
         tag=json.loads(raw)['tag_name']
     require(type(tag) is str and re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+(?:[-.][A-Za-z0-9]+)*',tag),'release tag invalid')
     archive='wechat-'+tag+'-darwin-arm64.tar.gz'
     for name in (archive,'SHA256SUMS'):
-        subprocess.run(['curl','-fsSL','--max-time','120',base+'download/'+tag+'/'+name,'-o',str(directory/name)],check=True)
+        subprocess.run(['curl','-fsSL','--connect-timeout','20','--max-time','600','--retry','2','--retry-max-time','900',base+'download/'+tag+'/'+name,'-o',str(directory/name)],check=True)
     external=(directory/'SHA256SUMS').read_bytes();require(len(external)<=1048576,'checksum file bound')
     with tarfile.open(directory/archive) as tar:
         members=tar.getmembers();require(len(members)<=4096,'release archive member bound')
@@ -923,11 +1026,17 @@ def download_package(tag,directory):
     return directory
 
 def main(arguments=None):
-    p=argparse.ArgumentParser(description='SDK-only atomic eight-artifact installer; no App/services/config changes')
+    p=argparse.ArgumentParser(description='Atomic eight-artifact installer; refreshes setup shortcut, retains WeChat/services/config')
     p.add_argument('--from-directory',type=Path);p.add_argument('--install-root',type=Path,default=Path.home()/'.local/share/wechat-use/sdk')
     p.add_argument('--command-directory',type=Path,default=Path(os.environ.get('INSTALL_DIR',str(Path.home()/'.local/bin'))))
     p.add_argument('--state-root',type=Path,action='append');p.add_argument('--rollback',action='store_true');p.add_argument('--tag')
     args=p.parse_args(arguments)
+    # Pre-SDK launchers pass their exact requested tag through this variable.
+    # Explicit arguments win; local activation and rollback never download.
+    if args.tag is None and args.from_directory is None and not args.rollback:
+        legacy=os.environ.get('WECHAT_USE_VERSION','')
+        if legacy and legacy!='latest':
+            args.tag=legacy if legacy.startswith('v') else 'v'+legacy
     require(sys.version_info>=(3,9),'Python 3.9+ required')
     require(args.from_directory is None or args.tag is None,'from-directory and tag are mutually exclusive')
     require(args.tag is None or re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+(?:[-.][A-Za-z0-9]+)*',args.tag),'exact release tag required')
@@ -943,6 +1052,8 @@ def main(arguments=None):
         with tempfile.TemporaryDirectory(prefix='wechat-sdk-download-') as temporary:
             package=download_package(args.tag,Path(temporary).resolve())
             result=transaction(args.install_root,package,roots,command_directory=args.command_directory)
+    try:refresh_setup_entry(args.install_root,result,Path.home()/'Applications')
+    except Exception:print('设置快捷入口未更新，旧入口保留；可运行 wechat-use setup 打开当前版本。',file=sys.stderr)
     print('SDK activated: '+result+'; launchers: '+str(args.install_root/'bin')+'; command routes: '+str(args.command_directory)+' (wechat-use aliases wechat). Previous suites, configuration, keys, DBs and loaded services are retained.')
 
 if __name__=='__main__':

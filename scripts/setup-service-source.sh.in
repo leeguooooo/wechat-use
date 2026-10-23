@@ -19,6 +19,14 @@ LABEL='gui/'+str(os.getuid())+'/ai.wechat.bridge'
 END=time.monotonic()+60
 CHANGED=False
 
+def closed_failure(error):
+    result={'schema':'wechat-use/setup-service-result/v1','status':'blocked',
+            'code':'service_repair_not_verified','changed':'unknown' if CHANGED else False}
+    if type(error) is Refused and str(error)=='SDK owner/debugger activity prevents repair':
+        result['reason']='sdk_activity_in_progress'
+        result['user_facing_zh']='仍有工具任务运行，暂未修复后台。请先正常结束监听或其他工具任务，再重试；不要强制结束微信。'
+    return result
+
 def remaining():
     value=END-time.monotonic();require(value>0,'service repair deadline');return min(value,10)
 def run(argv,check=True):
@@ -424,9 +432,9 @@ def repair(operation="repair"):
 if __name__=='__main__':
     try:
         with installation_guard():print(json.dumps(repair(sys.argv[1])))
-    except Exception:
-        # No unbounded/private original errors, no process fallback or retry.
-        print(json.dumps({'schema':'wechat-use/setup-service-result/v1','status':'blocked','code':'service_repair_not_verified','changed':'unknown' if CHANGED else False}),file=sys.stderr);sys.exit(69)
+    except Exception as error:
+        # Only exact fixed categories; never serialize original errors or paths.
+        print(json.dumps(closed_failure(error)),file=sys.stderr);sys.exit(69)
 PYSERVICE
     ;;
   *) exit 64 ;;
