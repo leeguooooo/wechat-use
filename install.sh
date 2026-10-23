@@ -895,7 +895,7 @@ def trusted_setup_app(path):
         require(not member.is_symlink(),'setup app alias refused')
         if member.is_dir():private_directory(member)
         else:regular(member,16777216)
-    requirement='anchor apple generic and certificate leaf[subject.OU] = "6ZPXG4KVVS" and identifier "ai.wechatskill.setup"'
+    requirement='=anchor apple generic and certificate leaf[subject.OU] = "6ZPXG4KVVS" and identifier "ai.wechatskill.setup"'
     result=subprocess.run(['/usr/bin/codesign','--verify','--strict','-R',requirement,str(path)],capture_output=True,timeout=10)
     require(result.returncode==0,'setup app signing identity refused')
     return path
