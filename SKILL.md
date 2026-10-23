@@ -79,6 +79,8 @@ This plugin defines **no UserPromptSubmit hook**. A Python-not-found hook error 
 
 `wechat-use runtime-custody --json` 只检查 Python 文件及祖先目录。设置窗口可明确修复当前用户拥有的 `/opt/homebrew`、`/opt/homebrew/Cellar` 的组写权限，并保存修复记录；命令行需显式运行 `runtime-custody --repair --json`。未知归属、可写解释器或其他路径需要修复 Python 安装，不要放宽校验。
 
+出现 `WXS-I-SOURCE-LOCK` 或 `not_expected_shared_dms_holder` 时，先正常结束工具任务，再正常退出并重新打开工具专用微信，登录后重试读取。不要手动删除或截断数据库、`-shm` 或 `-wal`；读取仍须通过原来的锁和文件校验。
+
 会话、未读和联系人使用独立快照；这些查询成功不代表历史消息完整。工具专用微信在前台时，发送会返回明确的 `wechat_in_foreground`，原请求不会自动重发。
 
 ## 安装检查
