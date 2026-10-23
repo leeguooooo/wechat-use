@@ -56,11 +56,17 @@ def developer_directory_custody(path,metadata):
     return True
 
 def process_rows():
-    p=run(['/bin/ps','-axo','pid=,ppid=,lstart=,comm='])
-    rows={}
-    for line in p.stdout.decode('utf8').splitlines():
-        fields=line.strip().split(None,7);require(len(fields)==8,'service process inventory malformed')
-        pid,ppid=int(fields[0]),int(fields[1]);require(pid not in rows,'duplicate process');rows[pid]=(ppid,fields[7],' '.join(fields[2:7]))
+    p=run(['/bin/ps','-axo','pid=,ppid=,lstart=,stat=,comm='])
+    rows={};seen=set();lines=p.stdout.decode('utf8').splitlines()
+    require(len(lines)<=8192,'service process inventory budget')
+    for line in lines:
+        fields=line.strip().split(None,8);require(len(fields)==9,'service process inventory malformed')
+        pid,ppid=int(fields[0]),int(fields[1]);require(pid not in seen,'duplicate process');seen.add(pid)
+        # Kernel-reported zombies have exited and cannot run SDK/App code.
+        # A live process named "<defunct>" is still retained and refused.
+        # Original actor closure, locks and stopped-App guards remain separate.
+        if fields[7].startswith('Z'):continue
+        rows[pid]=(ppid,fields[8],' '.join(fields[2:7]))
     require(0<len(rows)<=8192,'service process inventory budget');return rows
 
 def service_record():
