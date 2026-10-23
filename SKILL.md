@@ -3,13 +3,15 @@ name: wechat-use
 description: "Use WeChat on macOS Apple Silicon or Windows x64: query sessions, contacts and history, listen for messages, and send authorized text. Select the host-specific backend first. Windows has a standalone experimental CLI/MCP package with no system Python requirement; macOS uses the managed WeChat 4.1.9 clone and supports HTTP Bridge/Wechaty."
 metadata:
   author: leeguooooo
-  version: "1.19.6"
+  version: "1.19.7"
   platform: macOS-arm64, Windows-x64-experimental
 ---
 
 # WechatUse — select the host platform first
 
-This skill supports **macOS Apple Silicon and experimental Windows x64**. Never tell a Windows user that WechatUse has no Windows version. Plugin/skill version 1.19.6 is metadata; the runtime releases are independently versioned (macOS v1.19.6, Windows windows-v0.1.0).
+This skill supports **macOS Apple Silicon and experimental Windows x64**. Never tell a Windows user that WechatUse has no Windows version. Plugin/skill version 1.19.7 is metadata; the runtime releases are independently versioned (macOS v1.19.7, Windows windows-v0.1.0).
+
+macOS v1.19.7 fixes custom icon changes with retained older task records. Close the dedicated WeChat normally before changing or restoring its icon; specific refusal reasons are preserved.
 
 - **Windows:** follow only the Windows section below. Do not apply macOS requirements, activation/setup commands, LLDB, Accessibility, shell installer or managed 4.1.9 instructions.
 - **macOS:** skip the Windows section and follow the macOS section.
