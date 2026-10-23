@@ -128,6 +128,7 @@ curl -fsSL https://raw.githubusercontent.com/leeguooooo/wechat-use/main/install.
 - `init` 面向已登录的专用4.1.9，只读取有限内存候选，并用首页认证和完整私有DB/WAL快照验证。不直接用SQLite打开原库，也不自动重启或安装断点。`--force` 重新被动扫描；正常调用可先认证同账号缓存，但仍验证私有快照。
 - `initialization_scope.snapshot_validated_databases`列出经过完整私有快照验证的核心范围；其他可用密钥只做首页认证，`full_account_integrity_verified=false`。核心范围全部验证及原采集进程释放确认后，才原子切换配置。核心密钥空、缺失、歧义或超时保留旧配置；旧claim/pending不清理。
 - 后续导入新分片若提示需要初始化，可重新执行被动`init`。已发布的初始化密钥集合不由旧分片刷新器修改。
+- 1.19.7 起普通 `wechat-use upgrade` 先验证当前完整 SDK，已是最新版直接结束，不暂停服务。有新版本才受控暂停并恢复服务；占用时正常退出专用微信和设置窗口，`init` 不会解除占用。
 - 升级以GitHub Release八件套为一个原子版本。服务更新先核验原owner，再正常退出旧服务；未知owner会拒绝更新，不强杀调试器。
 - `doctor --paths`的`page_authenticated`仅证明密钥匹配，`logical_integrity_verified=false`；它不证明全库、历史消息或接收端已验证。
 

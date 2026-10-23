@@ -672,6 +672,39 @@ if NAME=='wechat' and sys.argv[1:2]==['upgrade']:
  rows=bounded_bytes(checks,1048576).decode('utf8').splitlines()
  expected=[line for line in rows if re.fullmatch('[a-f0-9]{64}  install.sh',line)]
  if len(expected)!=1 or hashlib.sha256(raw).hexdigest()!=expected[0][:64]:raise SystemExit('SDK upgrade installer hash mismatch')
+ maintenance=False
+ library=None
+ if options.tag is None and options.from_directory is None and not options.rollback:
+  # A normal upgrade authenticates the full active suite before deciding
+  # that no installation is needed. It never stops services for a no-op.
+  try:
+   body=raw.split(b"<<'PYINSTALL'\\n",1)[1].split(b"\\nPYINSTALL",1)[0]
+   library={'__name__':'authenticated_upgrade_inventory'}
+   exec(compile(body,'<authenticated-sdk-installer>','exec'),library)
+   _,active_manifest,_=library['load_package'](directory)
+   if 'g-'+active_manifest['sourceCommit']+'-'+library['digest'](directory/'BUILD-MANIFEST.json')[:16]!=generation:raise ValueError('active generation mismatch')
+  except Exception:raise SystemExit('SDK active suite custody refused; installation unchanged') from None
+  response=subprocess.run(['curl','-fsSL','--max-time','10','https://api.github.com/repos/leeguooooo/wechat-use/releases/latest'],stdin=subprocess.DEVNULL,capture_output=True,check=False)
+  if response.returncode or len(response.stdout)>1048576:raise SystemExit('SDK release check unavailable; installation unchanged')
+  try:
+   metadata=json.loads(response.stdout)
+   latest=metadata.get('tag_name') if type(metadata)is dict else None
+  except ValueError:raise SystemExit('SDK release metadata invalid; installation unchanged') from None
+  if type(latest)is not str or not re.fullmatch('v[0-9]+[.][0-9]+[.][0-9]+',latest):raise SystemExit('SDK release metadata invalid; installation unchanged')
+  current=active_manifest['version']
+  if type(current)is not str or not re.fullmatch('[0-9]+[.][0-9]+[.][0-9]+',current):raise SystemExit('SDK current version unavailable; installation unchanged')
+  if tuple(map(int,latest[1:].split('.')))<=tuple(map(int,current.split('.'))):
+   print('已是最新版本 '+current+'，无需升级。' if latest[1:]==current else '当前版本 '+current+'；最新正式版 '+latest[1:]+'，未降级。')
+   raise SystemExit(0)
+  options.tag=latest
+  if tuple(map(int,current.split('.')))>=(1,19,0):
+   try:paused=subprocess.run([str(directory/library['SETUP_SERVICE']),'pause'],stdin=subprocess.DEVNULL,capture_output=True,text=True,timeout=70)
+   except subprocess.TimeoutExpired:raise SystemExit('后台维护未在时限内完成；请打开工具设置查看维护状态，再重新检查升级。') from None
+   try:receipt=json.loads(paused.stdout)
+   except ValueError:receipt={}
+   if paused.returncode or type(receipt)is not dict or receipt.get('schema')!='wechat-use/setup-service-result/v1' or receipt.get('status')!='service_stopped' or type(receipt.get('changed'))is not bool:
+    raise SystemExit('升级尚未开始：请先正常退出工具专用微信、关闭工具设置窗口并结束其他工具任务；不要强制结束进程。后台维护未通过安全检查。')
+   maintenance=receipt['changed']
  args=[]
  if options.tag is not None:args+=['--tag',options.tag]
  if options.from_directory is not None:args+=['--from-directory',options.from_directory]
@@ -682,8 +715,22 @@ if NAME=='wechat' and sys.argv[1:2]==['upgrade']:
  for key in list(env):
   if key in ('BASH_ENV','ENV') or key.startswith('BASH_FUNC_'):del env[key]
  # Execute the authenticated bytes, never reopen the script by pathname.
- result=subprocess.run(['/bin/bash','-s','--',*args],input=raw,env=env)
- raise SystemExit(result.returncode)
+ restore_failed=False
+ try:
+  result=subprocess.run(['/bin/bash','-s','--',*args],input=raw,env=env)
+ finally:
+  if maintenance:
+   try:
+    selected=library['read_state'](root)['current']
+    active=root/'versions'/selected
+    library['load_package'](active)
+    restored=subprocess.run([str(active/library['SETUP_SERVICE']),'repair'],stdin=subprocess.DEVNULL,capture_output=True,text=True,timeout=70)
+    receipt=json.loads(restored.stdout)
+    if restored.returncode or receipt.get('schema')!='wechat-use/setup-service-result/v1' or receipt.get('status')!='service_started':raise ValueError('service restore refused')
+   except Exception:
+    restore_failed=True
+    print('后台恢复尚未确认，请打开工具设置查看维护状态；原安装和任务记录保留。',file=sys.stderr)
+ raise SystemExit(2 if restore_failed else result.returncode)
 if path.resolve(strict=True)!=path:raise SystemExit('SDK executable alias refused')
 m=path.lstat()
 if not stat.S_ISREG(m.st_mode) or m.st_nlink!=1 or m.st_uid!=os.geteuid() or stat.S_IMODE(m.st_mode)!=0o700:raise SystemExit('SDK executable custody refused')
