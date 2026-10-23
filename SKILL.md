@@ -3,13 +3,13 @@ name: wechat-use
 description: "Use WeChat on macOS Apple Silicon or Windows x64: query sessions, contacts and history, listen for messages, and send authorized text. Select the host-specific backend first. Windows has a standalone experimental CLI/MCP package with no system Python requirement; macOS uses the managed WeChat 4.1.9 clone and supports HTTP Bridge/Wechaty."
 metadata:
   author: leeguooooo
-  version: "1.19.5"
+  version: "1.19.6"
   platform: macOS-arm64, Windows-x64-experimental
 ---
 
 # WechatUse — select the host platform first
 
-This skill supports **macOS Apple Silicon and experimental Windows x64**. Never tell a Windows user that WechatUse has no Windows version. Plugin/skill version 1.19.5 is metadata; the runtime releases are independently versioned (macOS v1.19.5, Windows windows-v0.1.0).
+This skill supports **macOS Apple Silicon and experimental Windows x64**. Never tell a Windows user that WechatUse has no Windows version. Plugin/skill version 1.19.6 is metadata; the runtime releases are independently versioned (macOS v1.19.6, Windows windows-v0.1.0).
 
 - **Windows:** follow only the Windows section below. Do not apply macOS requirements, activation/setup commands, LLDB, Accessibility, shell installer or managed 4.1.9 instructions.
 - **macOS:** skip the Windows section and follow the macOS section.
@@ -72,6 +72,14 @@ This plugin defines **no UserPromptSubmit hook**. A Python-not-found hook error 
 # macOS only: stable CLI
 
 # wechat-use
+
+## 诊断和读取组件
+
+`wechat-use diagnostics --copy` 复制适合群聊的诊断摘要，完整报告保存在本机；`--copy --full` 明确复制完整报告。摘要不会包含聊天正文或密钥。
+
+`wechat-use runtime-custody --json` 只检查 Python 文件及祖先目录。设置窗口可明确修复当前用户拥有的 `/opt/homebrew`、`/opt/homebrew/Cellar` 的组写权限，并保存修复记录；命令行需显式运行 `runtime-custody --repair --json`。未知归属、可写解释器或其他路径需要修复 Python 安装，不要放宽校验。
+
+会话、未读和联系人使用独立快照；这些查询成功不代表历史消息完整。工具专用微信在前台时，发送会返回明确的 `wechat_in_foreground`，原请求不会自动重发。
 
 ## 安装检查
 

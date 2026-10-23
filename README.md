@@ -73,6 +73,8 @@ curl -fsSL https://raw.githubusercontent.com/leeguooooo/wechat-use/main/install.
 
 **升级**：`wechat-use upgrade` 校验并原子切换八件程序；`--tag vX.Y.Z`指定版本，`--check`或`--json`只查询。`--rollback`只切换到已保留、可认证的完整SDK。插件和skill副本由原管理器独立更新，SDK升级不会覆盖它们；旧`--skills`会明确拒绝并给出说明。未知任务继续保留，不能通过清记录来强行升级。
 
+1.19.6 的“复制诊断”默认只复制群聊摘要，完整报告保存在本机。读取未就绪时设置窗口会显示具体阻塞；受限的 Homebrew 目录权限修复需明确点击确认。已验证的旧设置入口会升级并保留备份，旧窗口运行时请先正常关闭。
+
 [设置问题处理指南](./docs/setup-support.html)
 
 ---

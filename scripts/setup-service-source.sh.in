@@ -19,6 +19,14 @@ LABEL='gui/'+str(os.getuid())+'/ai.wechat.bridge'
 END=time.monotonic()+60
 CHANGED=False
 
+def closed_failure(error):
+    result={'schema':'wechat-use/setup-service-result/v1','status':'blocked',
+            'code':'service_repair_not_verified','changed':'unknown' if CHANGED else False}
+    if type(error) is Refused and str(error)=='SDK owner/debugger activity prevents repair':
+        result['reason']='sdk_activity_in_progress'
+        result['user_facing_zh']='仍有工具任务运行，暂未修复后台。请先正常结束监听或其他工具任务，再重试；不要强制结束微信。'
+    return result
+
 def remaining():
     value=END-time.monotonic();require(value>0,'service repair deadline');return min(value,10)
 def run(argv,check=True):
@@ -48,11 +56,17 @@ def developer_directory_custody(path,metadata):
     return True
 
 def process_rows():
-    p=run(['/bin/ps','-axo','pid=,ppid=,lstart=,comm='])
-    rows={}
-    for line in p.stdout.decode('utf8').splitlines():
-        fields=line.strip().split(None,7);require(len(fields)==8,'service process inventory malformed')
-        pid,ppid=int(fields[0]),int(fields[1]);require(pid not in rows,'duplicate process');rows[pid]=(ppid,fields[7],' '.join(fields[2:7]))
+    p=run(['/bin/ps','-axo','pid=,ppid=,lstart=,stat=,comm='])
+    rows={};seen=set();lines=p.stdout.decode('utf8').splitlines()
+    require(len(lines)<=8192,'service process inventory budget')
+    for line in lines:
+        fields=line.strip().split(None,8);require(len(fields)==9,'service process inventory malformed')
+        pid,ppid=int(fields[0]),int(fields[1]);require(pid not in seen,'duplicate process');seen.add(pid)
+        # Kernel-reported zombies have exited and cannot run SDK/App code.
+        # A live process named "<defunct>" is still retained and refused.
+        # Original actor closure, locks and stopped-App guards remain separate.
+        if fields[7].startswith('Z'):continue
+        rows[pid]=(ppid,fields[8],' '.join(fields[2:7]))
     require(0<len(rows)<=8192,'service process inventory budget');return rows
 
 def service_record():
@@ -424,9 +438,9 @@ def repair(operation="repair"):
 if __name__=='__main__':
     try:
         with installation_guard():print(json.dumps(repair(sys.argv[1])))
-    except Exception:
-        # No unbounded/private original errors, no process fallback or retry.
-        print(json.dumps({'schema':'wechat-use/setup-service-result/v1','status':'blocked','code':'service_repair_not_verified','changed':'unknown' if CHANGED else False}),file=sys.stderr);sys.exit(69)
+    except Exception as error:
+        # Only exact fixed categories; never serialize original errors or paths.
+        print(json.dumps(closed_failure(error)),file=sys.stderr);sys.exit(69)
 PYSERVICE
     ;;
   *) exit 64 ;;
