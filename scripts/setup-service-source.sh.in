@@ -78,7 +78,7 @@ def service_record():
         require(len(values)==1,'service identity unavailable');fields[key]=values[0]
     require(fields['pid'].isdigit(),'service PID malformed');return fields
 
-def verified_source_guard(pid,row,bridge):
+def verified_source_guard(pid,row,bridge,parent_exit=False):
     binary=bridge.parent/'wechat-snapshot-validator'
     require(row[1]==str(binary),'source guard SDK differs from registered service')
     lib['load_package'](binary.parent)
@@ -101,7 +101,8 @@ def verified_source_guard(pid,row,bridge):
             require((inode,device)==(m.st_ino,m.st_dev),'source guard loaded text replaced');matched+=1
     require(matched==1,'source guard loaded text unavailable')
     lib['load_package'](binary.parent)
-    require(process_rows().get(pid)==row,'source guard process epoch changed')
+    live=process_rows().get(pid)
+    require(live is not None and live[1:]==row[1:] and live[0] in ((row[0],1) if parent_exit else (row[0],)),'source guard process epoch changed')
 
 def service_children(rows,pid,bridge):
     children={}
@@ -154,40 +155,62 @@ def orphan_identity(rows,bridge):
     require(process_rows().get(pid)==row,'orphan process epoch changed')
     return pid,row
 
-def drain_orphan(identity,quiet):
-    global CHANGED
-    if identity is None:return
-    pid,row=identity
-    quiet();require(process_rows().get(pid)==row,'orphan changed before graceful drain')
-    CHANGED=True
-    result=run(['/bin/kill','-TERM',str(pid)],False)
-    require(result.returncode==0 or pid not in process_rows(),'orphan graceful shutdown refused')
-    while pid in process_rows():
-        require(process_rows().get(pid)==row,'orphan PID reused during drain')
-        remaining();time.sleep(.05)
+def source_guard_children(rows,pid,bridge,parent_exit=False):
+    children={}
+    for child,row in rows.items():
+        if row[0]!=pid:continue
+        require(row[1]==str(bridge.parent/'wechat-snapshot-validator'),'daemon has an unrecognized live child')
+        try:verified_source_guard(child,row,bridge,parent_exit)
+        except (OSError,ValueError,RuntimeError):
+            if child not in process_rows():continue
+            raise
+        children[child]=row
+    return children
+
+def drain_orphan(orphan,quiet,allowed):
+    quiet()
+    pid,row=orphan
+    require(process_rows().get(pid)==row,'orphan identity changed before stop')
+    wait_service_exit({'pid':'0'},allowed,orphans=(pid,))
     quiet()
 
 def wait_service_exit(record,allowed,caller=None,orphans=()):
-    # A normal launchd bootout can leave its authenticated daemon or source-only
-    # read guard alive. Recheck the original role, then request ordinary SIGTERM once.
-    # Never signal an App/debugger, a replacement PID or a newly found child.
+    # Only authenticated original service roles can be drained. Its exact
+    # daemon may start a source-only reader while the bridge is exiting.
+    # Authenticate that parent/child link before admitting the reader; never
+    # signal App/debugger roles, unknown executables or replacement PIDs.
     bridge=int(record['pid']);children={pid:row for pid,row in allowed.items()
-        if (row[0]==bridge or pid in orphans) and Path(row[1]).name in ('wechatd','wechat-snapshot-validator')}
+        if Path(row[1]).name in ('wechatd','wechat-snapshot-validator')}
     signalled=set()
     while True:
         remaining();live=process_rows();job=service_record()
-        for pid,original in children.items():
+        for parent,original in list(children.items()):
+            if Path(original[1]).name!='wechatd' or parent not in live:continue
+            current=live[parent]
+            require(current[1:]==original[1:] and current[0] in (original[0],1),'original daemon identity changed during stop')
+            for child,row in source_guard_children(live,parent,Path(current[1]).parent/'wechat-bridge',True).items():
+                if child in children:require(children[child][1:]==row[1:],'reader identity changed during drain')
+                else:children[child]=row;allowed[child]=row
+        for pid,original in list(children.items()):
             current=live.get(pid)
             if current is None or pid in signalled:continue
-            require(current[1:]==original[1:] and current[0] in (bridge,1),'original daemon identity changed during stop')
+            require(current[1:]==original[1:] and current[0] in (original[0],1),'original service child identity changed during stop')
             if bridge not in live and job is None:
-                require(process_rows().get(pid)==current,'original daemon changed before shutdown')
+                current=process_rows().get(pid)
+                if current is None:continue
+                require(current[1:]==original[1:] and current[0] in (original[0],1),'original service child changed before shutdown')
                 if Path(current[1]).name=='wechat-snapshot-validator':
-                    verified_source_guard(pid,current,Path(current[1]).parent/'wechat-bridge')
+                    try:verified_source_guard(pid,current,Path(current[1]).parent/'wechat-bridge',True)
+                    except (OSError,ValueError,RuntimeError):
+                        if pid not in process_rows():continue
+                        raise
+                fresh=process_rows().get(pid)
+                if fresh is None:continue
+                require(fresh[1:]==original[1:] and fresh[0] in (original[0],1),'original service child replaced before signal')
                 result=run(['/bin/kill','-TERM',str(pid)],False)
-                require(result.returncode==0 or pid not in process_rows(),'original daemon shutdown refused')
+                require(result.returncode==0 or pid not in process_rows(),'original service child shutdown refused')
                 signalled.add(pid)
-        if job is None and not any(pid in live for pid in allowed if pid!=caller):return
+        if job is None and not any(pid in process_rows() for pid in allowed if pid!=caller):return
         time.sleep(.05)
 
 def setup_callers(active,rows,parent_pid):
@@ -430,6 +453,8 @@ def repair(operation="repair"):
         allowed.update(service_children(rows,pid,Path(rows[pid][1])))
     orphan=orphan_identity(rows,Path(rows[int(record['pid'])][1]) if record else bridge)
     if orphan:allowed[orphan[0]]=orphan[1]
+    for pid,row in list(allowed.items()):
+        if Path(row[1]).name=='wechatd':allowed.update(source_guard_children(rows,pid,Path(row[1]).parent/'wechat-bridge'))
     service_processes=dict(allowed)
     parent_pid=os.getppid()
     allowed.update(setup_callers(active,rows,parent_pid))
@@ -449,7 +474,8 @@ def repair(operation="repair"):
             run(['/bin/launchctl','bootout',LABEL]);changed=True
             wait_service_exit(record,service_processes,orphans=(orphan[0],) if orphan else ());quiet()
         elif orphan:
-            drain_orphan(orphan,quiet);changed=True
+            CHANGED=True
+            drain_orphan(orphan,quiet,service_processes);changed=True
         if operation=='pause':return {'schema':'wechat-use/setup-service-result/v1','status':'service_stopped','changed':changed,'permissions_verified':False,'data_verified':False}
         for account in accounts():
             if account!=STATE:
