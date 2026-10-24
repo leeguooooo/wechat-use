@@ -78,6 +78,41 @@ def service_record():
         require(len(values)==1,'service identity unavailable');fields[key]=values[0]
     require(fields['pid'].isdigit(),'service PID malformed');return fields
 
+def verified_source_guard(pid,row,bridge):
+    binary=bridge.parent/'wechat-snapshot-validator'
+    require(row[1]==str(binary),'source guard SDK differs from registered service')
+    lib['load_package'](binary.parent)
+    uid=run(['/bin/ps','-p',str(pid),'-o','uid=']).stdout.decode().strip()
+    require(uid==str(os.getuid()),'source guard process user')
+    args=run(['/bin/ps','-p',str(pid),'-o','args=']).stdout.decode('utf8').strip()
+    require(args==str(binary)+' --source-read-guard','source guard role differs')
+    run(['/usr/bin/codesign','--verify','--strict',str(binary)])
+    signature=run(['/usr/bin/codesign','-dvv',str(binary)])
+    require(b'TeamIdentifier=6ZPXG4KVVS' in signature.stderr.splitlines(),'source guard signing identity')
+    output=run(['/usr/sbin/lsof','-a','-p',str(pid),'-d','txt','-F0fDin'])
+    require(not output.stderr,'source guard text inventory incomplete')
+    inode=device=None;matched=0;m=binary.stat()
+    for field in output.stdout.split(b'\0'):
+        field=field.lstrip(b'\n')
+        if field.startswith(b'f'):inode=device=None
+        elif field.startswith(b'i'):inode=int(field[1:])
+        elif field.startswith(b'D'):device=int(field[1:],16)
+        elif field.startswith(b'n') and os.fsdecode(field[1:])==str(binary):
+            require((inode,device)==(m.st_ino,m.st_dev),'source guard loaded text replaced');matched+=1
+    require(matched==1,'source guard loaded text unavailable')
+    lib['load_package'](binary.parent)
+    require(process_rows().get(pid)==row,'source guard process epoch changed')
+
+def service_children(rows,pid,bridge):
+    children={}
+    for child,entry in rows.items():
+        if entry[0]!=pid:continue
+        if entry[1]==str(bridge.parent/'wechat-snapshot-validator'):
+            verified_source_guard(child,entry,bridge)
+        else:require(entry[1]==str(bridge.parent/'wechatd'),'service has an unrecognized live child')
+        children[child]=entry
+    return children
+
 def orphan_identity(rows,bridge):
     # Only the dedicated clone's one authenticated SDK daemon can be recovered.
     found=[(pid,row) for pid,row in rows.items() if Path(row[1]).name=='wechatd' and row[0]==1]
@@ -133,11 +168,11 @@ def drain_orphan(identity,quiet):
     quiet()
 
 def wait_service_exit(record,allowed,caller=None,orphans=()):
-    # wechatd starts its own session. A normal launchd bootout can leave that
-    # authenticated child alive; request its ordinary SIGTERM shutdown once.
+    # A normal launchd bootout can leave its authenticated daemon or source-only
+    # read guard alive. Recheck the original role, then request ordinary SIGTERM once.
     # Never signal an App/debugger, a replacement PID or a newly found child.
     bridge=int(record['pid']);children={pid:row for pid,row in allowed.items()
-        if (row[0]==bridge or pid in orphans) and Path(row[1]).name=='wechatd'}
+        if (row[0]==bridge or pid in orphans) and Path(row[1]).name in ('wechatd','wechat-snapshot-validator')}
     signalled=set()
     while True:
         remaining();live=process_rows();job=service_record()
@@ -147,6 +182,8 @@ def wait_service_exit(record,allowed,caller=None,orphans=()):
             require(current[1:]==original[1:] and current[0] in (bridge,1),'original daemon identity changed during stop')
             if bridge not in live and job is None:
                 require(process_rows().get(pid)==current,'original daemon changed before shutdown')
+                if Path(current[1]).name=='wechat-snapshot-validator':
+                    verified_source_guard(pid,current,Path(current[1]).parent/'wechat-bridge')
                 result=run(['/bin/kill','-TERM',str(pid)],False)
                 require(result.returncode==0 or pid not in process_rows(),'original daemon shutdown refused')
                 signalled.add(pid)
@@ -390,9 +427,7 @@ def repair(operation="repair"):
         require(record['program']==config['ProgramArguments'][0],'launchd/plist disagreement')
         pid=int(record['pid']);require(pid in rows and trusted_bridge(Path(rows[pid][1])),'running service is not an authenticated SDK')
         allowed[pid]=rows[pid]
-        for child,entry in rows.items():
-            if entry[0]==pid:
-                require(entry[1]==str(Path(rows[pid][1]).parent/'wechatd'),'service has an unrecognized live child');allowed[child]=entry
+        allowed.update(service_children(rows,pid,Path(rows[pid][1])))
     orphan=orphan_identity(rows,Path(rows[int(record['pid'])][1]) if record else bridge)
     if orphan:allowed[orphan[0]]=orphan[1]
     service_processes=dict(allowed)
