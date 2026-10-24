@@ -475,7 +475,9 @@ def repair(operation="repair"):
     if before and old.name=='wechat-bridge' and trusted_bridge(old):reader_bridges.append(old)
     idle_readers=idle_source_guards(rows,reader_bridges)
     allowed.update(idle_readers)
-    service_processes=dict(allowed)
+    retained_readers={pid:row for pid,row in idle_readers.items()
+        if operation=='repair' and Path(row[1]).parent==active}
+    service_processes={pid:row for pid,row in allowed.items() if pid not in retained_readers}
     parent_pid=os.getppid()
     allowed.update(setup_callers(active,rows,parent_pid))
     config['ProgramArguments'][0]=str(bridge)
@@ -496,7 +498,7 @@ def repair(operation="repair"):
         elif orphan:
             CHANGED=True
             drain_orphan(orphan,quiet,service_processes);changed=True
-        elif idle_readers and operation=='pause':
+        elif any(pid not in retained_readers for pid in idle_readers):
             CHANGED=True
             wait_service_exit({'pid':'0'},service_processes);quiet();changed=True
         # A verified current init reader can remain alive across repair. It
