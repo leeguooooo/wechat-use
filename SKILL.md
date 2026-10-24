@@ -3,13 +3,13 @@ name: wechat-use
 description: "Use WeChat on macOS Apple Silicon or Windows x64: query sessions, contacts and history, listen for messages, and send authorized text. Select the host-specific backend first. Windows has a standalone experimental CLI/MCP package with no system Python requirement; macOS uses the managed WeChat 4.1.9 clone and supports HTTP Bridge/Wechaty."
 metadata:
   author: leeguooooo
-  version: "1.19.7"
+  version: "1.19.8"
   platform: macOS-arm64, Windows-x64-experimental
 ---
 
 # WechatUse — select the host platform first
 
-This skill supports **macOS Apple Silicon and experimental Windows x64**. Never tell a Windows user that WechatUse has no Windows version. Plugin/skill version 1.19.7 is metadata; the runtime releases are independently versioned (macOS v1.19.7, Windows windows-v0.1.0).
+This skill supports **macOS Apple Silicon and experimental Windows x64**. Never tell a Windows user that WechatUse has no Windows version. Plugin/skill version 1.19.8 is metadata; the runtime releases are independently versioned (macOS v1.19.8, Windows windows-v0.1.0).
 
 macOS v1.19.7 fixes custom icon changes with retained older task records. Close the dedicated WeChat normally before changing or restoring its icon; specific refusal reasons are preserved.
 
@@ -76,6 +76,8 @@ This plugin defines **no UserPromptSubmit hook**. A Python-not-found hook error 
 # wechat-use
 
 ## 诊断和读取组件
+
+1.19.8 起，发送失败的窗口提示和复制诊断保留固定错误码、失败步骤及系统读写错误类别；状态未知时不自动重发。旧版已经省略的错误无法补回。
 
 `wechat-use diagnostics --copy` 复制适合群聊的诊断摘要，完整报告保存在本机；`--copy --full` 明确复制完整报告。摘要不会包含聊天正文或密钥。
 
