@@ -104,6 +104,21 @@ def verified_source_guard(pid,row,bridge,parent_exit=False):
     live=process_rows().get(pid)
     require(live is not None and live[1:]==row[1:] and live[0] in ((row[0],1) if parent_exit else (row[0],)),'source guard process epoch changed')
 
+def idle_source_guards(rows,bridges):
+    # Only the fixed filesystem-only role may outlive an init caller. Native
+    # owner/debugger/send roles never enter this admission path.
+    allowed={str(bridge.parent/'wechat-snapshot-validator'):bridge for bridge in bridges}
+    found={}
+    for pid,row in rows.items():
+        if row[0]!=1 or Path(row[1]).name!='wechat-snapshot-validator':continue
+        require(row[1] in allowed,'orphan reader SDK is not active or registered')
+        try:verified_source_guard(pid,row,allowed[row[1]])
+        except (OSError,ValueError,RuntimeError):
+            if pid not in process_rows():continue
+            raise
+        found[pid]=row
+    return found
+
 def service_children(rows,pid,bridge):
     children={}
     for child,entry in rows.items():
@@ -158,8 +173,8 @@ def orphan_identity(rows,bridge):
 def source_guard_children(rows,pid,bridge,parent_exit=False):
     children={}
     for child,row in rows.items():
-        if row[0]!=pid:continue
-        require(row[1]==str(bridge.parent/'wechat-snapshot-validator'),'daemon has an unrecognized live child')
+        if row[0]!=pid or Path(row[1]).name!='wechat-snapshot-validator':continue
+        require(row[1]==str(bridge.parent/'wechat-snapshot-validator'),'daemon reader SDK differs')
         try:verified_source_guard(child,row,bridge,parent_exit)
         except (OSError,ValueError,RuntimeError):
             if child not in process_rows():continue
@@ -455,7 +470,14 @@ def repair(operation="repair"):
     if orphan:allowed[orphan[0]]=orphan[1]
     for pid,row in list(allowed.items()):
         if Path(row[1]).name=='wechatd':allowed.update(source_guard_children(rows,pid,Path(row[1]).parent/'wechat-bridge'))
-    service_processes=dict(allowed)
+    reader_bridges=[bridge]
+    if record:reader_bridges.append(Path(rows[int(record['pid'])][1]))
+    if before and old.name=='wechat-bridge' and trusted_bridge(old):reader_bridges.append(old)
+    idle_readers=idle_source_guards(rows,reader_bridges)
+    allowed.update(idle_readers)
+    retained_readers={pid:row for pid,row in idle_readers.items()
+        if operation=='repair' and Path(row[1]).parent==active}
+    service_processes={pid:row for pid,row in allowed.items() if pid not in retained_readers}
     parent_pid=os.getppid()
     allowed.update(setup_callers(active,rows,parent_pid))
     config['ProgramArguments'][0]=str(bridge)
@@ -476,6 +498,11 @@ def repair(operation="repair"):
         elif orphan:
             CHANGED=True
             drain_orphan(orphan,quiet,service_processes);changed=True
+        elif any(pid not in retained_readers for pid in idle_readers):
+            CHANGED=True
+            wait_service_exit({'pid':'0'},service_processes);quiet();changed=True
+        # A verified current init reader can remain alive across repair. It
+        # owns only filesystem descriptors and is reused by the selected SDK.
         if operation=='pause':return {'schema':'wechat-use/setup-service-result/v1','status':'service_stopped','changed':changed,'permissions_verified':False,'data_verified':False}
         for account in accounts():
             if account!=STATE:
