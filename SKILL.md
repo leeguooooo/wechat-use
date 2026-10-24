@@ -3,13 +3,13 @@ name: wechat-use
 description: "Use WeChat on macOS Apple Silicon or Windows x64: query sessions, contacts and history, listen for messages, and send authorized text. Select the host-specific backend first. Windows has a standalone experimental CLI/MCP package with no system Python requirement; macOS uses the managed WeChat 4.1.9 clone and supports HTTP Bridge/Wechaty."
 metadata:
   author: leeguooooo
-  version: "1.19.8"
+  version: "1.19.9"
   platform: macOS-arm64, Windows-x64-experimental
 ---
 
 # WechatUse — select the host platform first
 
-This skill supports **macOS Apple Silicon and experimental Windows x64**. Never tell a Windows user that WechatUse has no Windows version. Plugin/skill version 1.19.8 is metadata; the runtime releases are independently versioned (macOS v1.19.8, Windows windows-v0.1.0).
+This skill supports **macOS Apple Silicon and experimental Windows x64**. Never tell a Windows user that WechatUse has no Windows version. Plugin/skill version 1.19.9 is metadata; the runtime releases are independently versioned (macOS v1.19.9, Windows windows-v0.1.0).
 
 macOS v1.19.7 fixes custom icon changes with retained older task records. Close the dedicated WeChat normally before changing or restoring its icon; specific refusal reasons are preserved.
 
@@ -85,7 +85,7 @@ This plugin defines **no UserPromptSubmit hook**. A Python-not-found hook error 
 
 出现 `WXS-I-SOURCE-LOCK` 或 `not_expected_shared_dms_holder` 时，先正常结束工具任务，再正常退出并重新打开工具专用微信，登录后重试读取。不要手动删除或截断数据库、`-shm` 或 `-wal`；读取仍须通过原来的锁和文件校验。
 
-后台发送前请让专用微信停在聊天页，并切到其他应用。朋友圈等未覆盖界面可能拒绝会话定位；诊断会保留原因，原请求不会自动重发。
+1.19.9 提供窗口内“发送准备检查”。遇到 `wechat_in_foreground` 或 `background_navigation_unavailable`，使用返回的 `remediation_command`（`wechat-use setup --prepare-send`）打开引导，让用户在工具窗口完成界面确认；不要只口头转述操作步骤。确认只重新检查当前条件，不发送消息、不重放原请求；未知原请求只核对原回执。测试消息需要单独点击并确认。
 
 会话、未读和联系人使用独立快照；这些查询成功不代表历史消息完整。工具专用微信在前台时，发送会返回明确的 `wechat_in_foreground`，原请求不会自动重发。
 
