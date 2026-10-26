@@ -45,7 +45,7 @@
 | display_name 解析（群名/备注/昵称） | ✅ v1.13.8/9 | `sessions` / `unread` / `contacts` / `history` | 自动把 `xxxx@chatroom` 映射成群名；history 同时给出 `chat_display_name`（agent 直接看懂） |
 | 4.1.9 适配 | ✅ v1.13.7 | `wechat-use init` | 跟上 WeChat 4.1.9 本地存储变化；查询命令全部复活 |
 | 导出（Markdown / JSON） | ✅ v1.2 | `wechat-use export <chat>` | |
-| 朋友圈数据 | 当前读取范围未开放 | `sns-*` 保留命令 | 不属于已验证的聊天快照范围；命令存在不代表当前可安全读取 |
+| 朋友圈读取与刷新 | ✅ v1.19.10 | `sns-feed --refresh`、`sns-search` | 账号绑定的私有快照；通过专用微信请求刷新，首次授权或手动确认由工具窗口引导。支持照片、视频读取；不支持发布、点赞、评论，不保证服务器回执与远端历史完整 |
 | `wechat-use doctor --paths` | ✅ v1.14.0 | `wechat-use doctor --paths [--json]` | DB root + 3.x/4.x 路径 + WeChat 进程 + TCC 状态一行看完 |
 | `wechat-use doctor --image` | ✅ v1.14.1/2 | `wechat-use doctor --image [--json]` | 图片解密路径自检,避免假绿 |
 | `wechat-use init --literal-scan` | ✅ v1.14.0 | `wechat-use init --literal-scan` | 版本无关 fallback (WeChat 大版本升级 适配完成前临时跑) |
@@ -131,3 +131,5 @@ curl -N "http://127.0.0.1:18400/messages/stream?since=$SINCE"
 **鉴权**:`WECHAT_BRIDGE_BEARER=<secret>` env 设了就要求 `Authorization: Bearer <secret>`(`/health` 不要)。loopback 默认信任,公网 / Tailscale 暴露场景才需要。
 
 **激活码不会被绕**:bridge 只转发,wechatd 仍然做 AEAD + 服务端过期校验;未激活 / 已过期 → HTTP 401 / 402。
+
+MCP 历史查询不会自动转写语音，也未提供独立语音转写工具。AI 需调用 CLI `history` 或 `audio transcribe <server_id> --json --include-transcript` 补读本机可用语音。

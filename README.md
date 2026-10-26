@@ -39,7 +39,7 @@
 - 📜 读消息 / 历史 + 全文搜索（FTS）+ 导出
 - 👥 联系人 / 群 / 会话（群名自动解析）
 - ⭐ 收藏 · 🖼 图片（验证缓存、原图下载与显示转换）
-- 朋友圈命令保留，当前尚未开放经过验证的读取范围。
+- 朋友圈时间线、搜索、照片与视频读取，可通过专用微信请求刷新；不保证远端历史完整。
 - 🎙 语音消息转文字（whisper 本地转写）
 - ↩️ 撤回消息归档恢复
 - 💻 **终端聊天 TUI**（`chat`，Claude Code 风，在终端里收发，屏幕上看不出在聊微信）
@@ -105,6 +105,9 @@ wechat-use search "会议" --in "项目讨论组"       # --in 同样解析昵�
 # 收消息流（agent 神器）
 wechat-use listen --wxid filehelper
 wechat-use listen --on-message ./reply.sh
+
+# 朋友圈读取（v1.19.10+）
+wechat-use sns-feed --refresh -n 20 --json     # 首次使用由工具窗口引导授权或手动确认
 
 # 语音转文字（v1.13.25+）
 wechat-use audio setup                         # 一次性装齐 ffmpeg/whisper.cpp/silk-decoder/模型

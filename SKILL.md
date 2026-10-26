@@ -3,13 +3,13 @@ name: wechat-use
 description: "Use WeChat on macOS Apple Silicon or Windows x64: query sessions, contacts and history, listen for messages, and send authorized text. Select the host-specific backend first. Windows has a standalone experimental CLI/MCP package with no system Python requirement; macOS uses the managed WeChat 4.1.9 clone and supports HTTP Bridge/Wechaty."
 metadata:
   author: leeguooooo
-  version: "1.19.9"
+  version: "1.19.10"
   platform: macOS-arm64, Windows-x64-experimental
 ---
 
 # WechatUse — select the host platform first
 
-This skill supports **macOS Apple Silicon and experimental Windows x64**. Never tell a Windows user that WechatUse has no Windows version. Plugin/skill version 1.19.9 is metadata; the runtime releases are independently versioned (macOS v1.19.9, Windows windows-v0.1.0).
+This skill supports **macOS Apple Silicon and experimental Windows x64**. Never tell a Windows user that WechatUse has no Windows version. Plugin/skill version 1.19.10 is metadata; the runtime releases are independently versioned (macOS v1.19.10, Windows windows-v0.1.0).
 
 macOS v1.19.7 fixes custom icon changes with retained older task records. Close the dedicated WeChat normally before changing or restoring its icon; specific refusal reasons are preserved.
 
@@ -119,9 +119,9 @@ curl -fsSL https://raw.githubusercontent.com/leeguooooo/wechat-use/main/install.
 - 独立 `audio transcribe --json` 默认隐藏正文；AI 需要理解内容时必须加 `--include-transcript`。转写文字属于私聊内容，不复制到公开诊断、日志或公告。
 - 缺少模型或依赖时，运行 `wechat-use audio setup` 完成一次性准备。仅转写当前账号本机可用的语音；未下载、未缓存或读取失败时说明状态，不猜内容，不发送测试消息，也不自动重试未知操作。
 
-## 朋友圈读取（macOS 1.19.10 候选及后续支持版本）
+## 朋友圈读取（macOS 1.19.10）
 
-先检查已安装运行时版本。1.19.10 候选支持 `wechat-use sns-feed --refresh -n 20 --json`：通过专用微信请求刷新后读取本机快照，首次使用可能打开工具内授权或手动确认窗口。照片、视频使用返回的朋友圈媒体引用；不要伪造聊天消息引用。刷新动作、本机落盘与服务器回执是不同证据，不能承诺远端历史完整。旧版返回 `db_scope_unsupported` 时，不为此重复初始化。候选已安装不代表公开发行版已更新。
+先检查已安装运行时版本。1.19.10 支持 `wechat-use sns-feed --refresh -n 20 --json`：通过专用微信请求刷新后读取本机快照，首次使用可能打开工具内授权或手动确认窗口。照片、视频使用返回的朋友圈媒体引用；不要伪造聊天消息引用。刷新动作、本机落盘与服务器回执是不同证据，不能承诺远端历史完整。旧版返回 `db_scope_unsupported` 时，不为此重复初始化。已安装的候选版与公开发行版状态分别核对。
 
 ## 图片读取（统一入口，普通图与HD原图已实机验收）
 
