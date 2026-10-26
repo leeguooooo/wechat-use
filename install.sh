@@ -445,6 +445,41 @@ def retirement_pid_absent(pid):
     except OSError:raise Refused('retired target absence unproven') from None
     return False
 
+def retirement_target_exited(pid,expected,boot_ns=None):
+    # PID reuse is not original-target survival. This grants SDK administration
+    # only; retained evidence and every native-admission flag stay unchanged.
+    try:
+        if retirement_pid_absent(pid):return True
+    except Refused as error:
+        if not isinstance(error.__context__,PermissionError):raise
+    def canonical_epoch(value):
+        if type(value)is not str or not re.fullmatch(r'(Mon|Tue|Wed|Thu|Fri|Sat|Sun) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) +[0-9]{1,2} [0-9]{2}:[0-9]{2}:[0-9]{2} [0-9]{4}',value):return None
+        try:
+            import datetime
+            parsed=time.strptime(value,'%a %b %d %H:%M:%S %Y')
+            if datetime.datetime(*parsed[:6]).weekday()!=parsed.tm_wday:return None
+            return parsed[:6]
+        except (ValueError,OverflowError):return None
+    original=canonical_epoch(expected)
+    if original is None:return False
+    # Only clearly preboot targets can use this fallback. The 48-hour margin
+    # covers missing timezone information in the legacy ps wire format.
+    # Same-boot targets still require actual PID absence.
+    import datetime
+    boot_ns=retirement_boot_ns() if boot_ns is None else boot_ns
+    original_ns=int(datetime.datetime(*original,tzinfo=datetime.timezone.utc).timestamp())*1000000000
+    if original_ns+48*60*60*1000000000>=boot_ns:return False
+    epochs=[]
+    for _ in range(2):
+        result=subprocess.run(['/bin/ps','-p',str(pid),'-o','lstart='],capture_output=True,text=True,
+                              timeout=3,env={**os.environ,'LC_ALL':'C'})
+        if result.returncode!=0 or result.stderr or not result.stdout.strip():
+            return retirement_pid_absent(pid)
+        observed=canonical_epoch(result.stdout.strip())
+        if observed is None:return False
+        epochs.append(observed)
+    return epochs[0]==epochs[1] and epochs[0]!=original
+
 class StoppedTargetRetirement(PrebootRetirement):
     # Separate authority from preboot evidence: no age inference or cached
     # certificate. It permits administration only after the exact targets ended.
@@ -553,11 +588,11 @@ class StoppedTargetRetirement(PrebootRetirement):
                     or self.original_request_target_binding(entry,target,start)),
                 'retained target executable differs from managed selection')
             self.legacy_bound.add((entry.parent.parent,target.get('pid'),start))
-        require(retirement_pid_absent(target.get('pid')),'original target PID still exists')
+        require(retirement_target_exited(target.get('pid'),start,self.boot),'original target PID still exists')
     def require_process_exit(self,pid,expected,role):
         if role=='target':
             require(type(expected)is str and 0<len(expected)<=64 and all(32<=ord(c)<127 for c in expected),'retained target epoch invalid')
-            require(retirement_pid_absent(pid),'original target PID still exists')
+            require(retirement_target_exited(pid,expected,self.boot),'original target PID still exists')
         elif role=='parent' and pid in self.approved_parents:
             require(expected==self.approved_parents[pid],'approved parent epoch differs from original plan')
             retirement_process_exited(pid,expected) # also require a determinate kernel epoch/existence probe
