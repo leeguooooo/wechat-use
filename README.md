@@ -123,6 +123,12 @@ wechat-use doctor                              # 任何问题先跑这个
 wechat-use auth status                         # 第一行直接告诉你「剩余 X 天」
 ```
 
+macOS 从 v1.19.13 起默认不持续监听。运行 `wechat-use listen` 或建立 daemon 消息订阅时才启动监听，最后一个订阅关闭后停止；首次订阅会先校验读取快照。HTTP 消息流在连接期间按需读取。
+
+`wechat-use search` 首次使用或数据变化后会按需更新索引，未完成时请稍后重试。`wechat-use recalled` 的后台归档只覆盖 daemon 消息订阅期间；未监听时已撤回的原文无法事后补回。微信设置中的原生防撤回开关不受此影响。
+
+如需手动验证一次读取而不持续监听，运行 `wechat-use setup --validate-read`。
+
 ---
 
 ## 接 AI agent / 平台
