@@ -188,7 +188,7 @@ wechat-use send --image /absolute/path/image.png --recipient '收件人' --json
 ## 接入 agent
 
 - 只读 MCP 使用 `wechat-mcp` stdio server。历史、搜索、图片工具走同一读取服务；图片可用时返回图片 content block。MCP 发送由独立的 `wechat-send-mcp` 提供，仅在用户需要发送能力时配置。
-- HTTP Bridge 默认监听本机 `127.0.0.1:18400`。`/health` 检查当前 daemon、接收和发送就绪状态；不能只看 HTTP 200。
+- HTTP Bridge 默认监听本机 `127.0.0.1:18400`。`/health` 检查当前 daemon、接收和发送就绪状态；不能只看 HTTP 200。接收状态 `inactive` 表示当前没有 daemon 消息订阅，不代表后台故障，也不代表读取已验证。
 - Hermes 使用 `wechat-bridge --shape hermes`。群里是否 @ 当前账号以 bridge 的 `isMentioned` 为准；用 `fromSelf` 排除自发消息，不能只比较 senderId。
 - `/messages/stream?since=<epoch>` 使用明确起点，避免无意回放全部历史。事件流只带媒体引用；主动需要图片时调用 `/image`，不要把加密 CDN 地址直接交给识图模型。
 - Wechaty 使用 `wechat-wechaty-gateway`；图片返回可显示的 FileBox。CLI、MCP、Bridge、gateway 的细节以各自 `--help` 和 [能力说明](docs/capabilities.md) 为准。
