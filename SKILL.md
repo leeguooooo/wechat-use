@@ -107,8 +107,8 @@ curl -fsSL https://raw.githubusercontent.com/leeguooooo/wechat-use/main/install.
 - 查聊天记录 / 微信历史 / 搜索消息
 - 微信联系人 / 群成员 / 未读消息
 - 收新消息 / 实时监听 / on-message 回调
-- macOS 1.19.13 起默认不持续监听。`wechat-use listen` 或 daemon 消息订阅启动后才监听，最后一个订阅结束后停止；订阅成功前会先校验基线。`--wxid` 只过滤发给订阅者的事件，后台采集和撤回归档仍覆盖当前账号的消息库。HTTP 消息流在连接期间按需读取，不启动后台撤回归档。
-- `search` 按需更新索引，提示索引更新时稍后重试。`recalled` 的后台归档只覆盖 daemon 消息订阅期间，未监听时已撤回的原文不能保证找回；微信设置中的原生防撤回功能独立。`wechat-use setup --validate-read` 可主动验证一次读取，不开启持续监听。
+- macOS 1.19.13 起默认不持续监听。`wechat-use listen` 或 daemon 消息订阅启动后才监听，最后一个订阅结束后会先安全结束已开始的采集再停止；订阅成功前会先校验基线。`--wxid` 只过滤发给订阅者的事件，后台采集和撤回归档仍覆盖当前账号的消息库。HTTP 消息流在连接期间按需读取，不启动后台撤回归档。
+- `search` 按需更新索引，提示索引更新时稍后重试。`recalled` 只在 daemon 消息订阅期间尝试后台归档，不保证完整；未监听时已撤回的原文不能保证找回。微信设置中的原生防撤回功能独立。`wechat-use setup --validate-read` 可主动验证一次读取，不开启持续监听。
 - 导出聊天 / 数据库统计 / 收藏
 - MCP 查询微信历史 / 联系人 / 朋友圈；朋友圈能力以已安装运行时版本为准，见下方说明。
 - 对接 Hermes / n8n / Dify / LangChain 本地 agent
