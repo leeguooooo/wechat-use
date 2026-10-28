@@ -3,13 +3,13 @@ name: wechat-use
 description: "Use WeChat on macOS Apple Silicon or Windows x64: query sessions, contacts and history, listen for messages, and send authorized text. Select the host-specific backend first. Windows has a standalone experimental CLI/MCP package with no system Python requirement; macOS uses the managed WeChat 4.1.9 clone and supports HTTP Bridge/Wechaty."
 metadata:
   author: leeguooooo
-  version: "1.19.12"
+  version: "1.19.13"
   platform: macOS-arm64, Windows-x64-experimental
 ---
 
 # WechatUse — select the host platform first
 
-This skill supports **macOS Apple Silicon and experimental Windows x64**. Never tell a Windows user that WechatUse has no Windows version. Plugin/skill version 1.19.12 is metadata; the runtime releases are independently versioned (macOS v1.19.12, Windows windows-v0.1.0).
+This skill supports **macOS Apple Silicon and experimental Windows x64**. Never tell a Windows user that WechatUse has no Windows version. Plugin/skill version 1.19.13 is metadata; the runtime releases are independently versioned (macOS v1.19.13, Windows windows-v0.1.0).
 
 macOS v1.19.7 fixes custom icon changes with retained older task records. Close the dedicated WeChat normally before changing or restoring its icon; specific refusal reasons are preserved.
 
@@ -107,6 +107,8 @@ curl -fsSL https://raw.githubusercontent.com/leeguooooo/wechat-use/main/install.
 - 查聊天记录 / 微信历史 / 搜索消息
 - 微信联系人 / 群成员 / 未读消息
 - 收新消息 / 实时监听 / on-message 回调
+- macOS 1.19.13 起默认不持续监听。`wechat-use listen` 或 daemon 消息订阅启动后才监听，最后一个订阅结束后会先安全结束已开始的采集再停止；订阅成功前会先校验基线。`--wxid` 只过滤发给订阅者的事件，后台采集和撤回归档仍覆盖当前账号的消息库。HTTP 消息流在连接期间按需读取，不启动后台撤回归档。
+- `search` 按需更新索引，提示索引更新时稍后重试。`recalled` 只在 daemon 消息订阅期间尝试后台归档，不保证完整；未监听时已撤回的原文不能保证找回。微信设置中的原生防撤回功能独立。`wechat-use setup --validate-read` 可主动验证一次读取，不开启持续监听。
 - 导出聊天 / 数据库统计 / 收藏
 - MCP 查询微信历史 / 联系人 / 朋友圈；朋友圈能力以已安装运行时版本为准，见下方说明。
 - 对接 Hermes / n8n / Dify / LangChain 本地 agent
@@ -186,7 +188,7 @@ wechat-use send --image /absolute/path/image.png --recipient '收件人' --json
 ## 接入 agent
 
 - 只读 MCP 使用 `wechat-mcp` stdio server。历史、搜索、图片工具走同一读取服务；图片可用时返回图片 content block。MCP 发送由独立的 `wechat-send-mcp` 提供，仅在用户需要发送能力时配置。
-- HTTP Bridge 默认监听本机 `127.0.0.1:18400`。`/health` 检查当前 daemon、接收和发送就绪状态；不能只看 HTTP 200。
+- HTTP Bridge 默认监听本机 `127.0.0.1:18400`。`/health` 检查当前 daemon、接收和发送就绪状态；不能只看 HTTP 200。接收状态 `inactive` 表示当前没有 daemon 消息订阅，不代表后台故障，也不代表读取已验证。
 - Hermes 使用 `wechat-bridge --shape hermes`。群里是否 @ 当前账号以 bridge 的 `isMentioned` 为准；用 `fromSelf` 排除自发消息，不能只比较 senderId。
 - `/messages/stream?since=<epoch>` 使用明确起点，避免无意回放全部历史。事件流只带媒体引用；主动需要图片时调用 `/image`，不要把加密 CDN 地址直接交给识图模型。
 - Wechaty 使用 `wechat-wechaty-gateway`；图片返回可显示的 FileBox。CLI、MCP、Bridge、gateway 的细节以各自 `--help` 和 [能力说明](docs/capabilities.md) 为准。
