@@ -16,7 +16,7 @@ exec(compile(base64.b64decode('@SDK_INSTALLER_SOURCE_BASE64@'),'<fixed-sdk-inven
 require=lib['require'];Refused=lib['Refused']
 HOME=Path.home();SDK=HOME/'.local/share/wechat-use/sdk';STATE=HOME/'.wx-rs'
 LABEL='gui/'+str(os.getuid())+'/ai.wechat.bridge'
-END=time.monotonic()+60
+END=time.monotonic()+600
 CHANGED=False
 
 def closed_failure(error):

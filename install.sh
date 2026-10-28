@@ -287,7 +287,7 @@ class PrebootRetirement:
     def __init__(self,state_roots,verifiers):
         self.roots=state_roots;self.verifiers=verifiers;self.stack=contextlib.ExitStack()
         self.entries=[];self.files={};self.locks=[];self.identities=[];self.inventories=[];self.bytes=0
-        self.end=time.monotonic()+30;self.boot=retirement_boot_ns();self.cutoff=self.boot-300000000000
+        self.end=time.monotonic()+300;self.boot=retirement_boot_ns();self.cutoff=self.boot-300000000000
     def bounded(self):require(time.monotonic()<self.end,'preboot retirement inspection deadline')
     def listing(self,path):
         self.bounded();private_directory(path);members=list(path.iterdir())
@@ -319,6 +319,13 @@ class PrebootRetirement:
         return json.loads(raw,object_pairs_hook=strict_object),hashlib.sha256(raw).hexdigest()
     def prepare_target_bindings(self):pass
     def verify_target(self,target,context=None):pass
+    def retained_namespace_matches(self,binding,worker):
+        m=worker.stat();device=binding.get('namespace_device');inode=binding.get('namespace_inode')
+        if type(device)is not int or device<=0 or type(inode)is not int or inode<=0:return False
+        # A copied historical namespace is admissible only for stopped-target
+        # administration. Current-volume entries still require the exact inode;
+        # plan/request bindings, process absence and current-file fences remain.
+        return inode==m.st_ino if device==m.st_dev else not self.PREBOOT
     def require_process_exit(self,pid,expected,role):
         require(retirement_process_exited(pid,expected),'original process identity still live')
     def plan(self,entry,registry):
@@ -354,7 +361,7 @@ class PrebootRetirement:
         if control.exists():
             c,_=self.read(control);b=c.get('binding',{})
             require(c.get('schema')=='wechat-native-owner/v2' and c.get('namespace')==str(worker)
-                    and type(b)is dict and len(b)==7 and b.get('namespace_inode')==worker.stat().st_ino,
+                    and type(b)is dict and len(b)==7 and self.retained_namespace_matches(b,worker),
                     'retained control domain invalid')
             pairs.append((b.get('owner_pid'),b.get('owner_epoch'),'owner'))
             for name,key in [('result.json','lifecycle_binding'),('owner-closed.json','binding'),('owner-final-audit.json','binding')]:
@@ -558,8 +565,7 @@ class StoppedTargetRetirement(PrebootRetirement):
         private_directory(worker);c,_=self.read(control);binding=c.get('binding',{})
         require(type(binding)is dict and set(binding)=={'worker_request_id','owner_pid','owner_epoch','lldb_pid','request_sha256','namespace_device','namespace_inode'}
                 and c.get('schema')=='wechat-native-owner/v2' and c.get('namespace')==str(worker)
-                and type(binding.get('namespace_device'))is int and binding['namespace_device']>0
-                and binding.get('namespace_inode')==worker.stat().st_ino,
+                and self.retained_namespace_matches(binding,worker),
                 'retained original request control mismatch')
         # The recorded device number belongs to the original boot/mount. It
         # stays literal across all original bindings; it is not current-volume
