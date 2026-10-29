@@ -3,13 +3,13 @@ name: wechat-use
 description: "Use WeChat on macOS Apple Silicon or Windows x64: query sessions, contacts and history, listen for messages, and send authorized text. Select the host-specific backend first. Windows has a standalone experimental CLI/MCP package with no system Python requirement; macOS uses the managed WeChat 4.1.9 clone and supports HTTP Bridge/Wechaty."
 metadata:
   author: leeguooooo
-  version: "1.19.13"
+  version: "1.19.14"
   platform: macOS-arm64, Windows-x64-experimental
 ---
 
 # WechatUse — select the host platform first
 
-This skill supports **macOS Apple Silicon and experimental Windows x64**. Never tell a Windows user that WechatUse has no Windows version. Plugin/skill version 1.19.13 is metadata; the runtime releases are independently versioned (macOS v1.19.13, Windows windows-v0.1.0).
+This skill supports **macOS Apple Silicon and experimental Windows x64**. Never tell a Windows user that WechatUse has no Windows version. Plugin/skill version 1.19.14 is metadata; the runtime releases are independently versioned (macOS v1.19.14, Windows windows-v0.1.0).
 
 macOS v1.19.7 fixes custom icon changes with retained older task records. Close the dedicated WeChat normally before changing or restoring its icon; specific refusal reasons are preserved.
 
@@ -81,7 +81,9 @@ This plugin defines **no UserPromptSubmit hook**. A Python-not-found hook error 
 
 `wechat-use diagnostics --copy` 复制适合群聊的诊断摘要，完整报告保存在本机；`--copy --full` 明确复制完整报告。摘要不会包含聊天正文或密钥。
 
-`wechat-use runtime-custody --json` 只检查 Python 文件及祖先目录。设置窗口可明确修复当前用户拥有的 `/opt/homebrew`、`/opt/homebrew/Cellar` 的组写权限，并保存修复记录；命令行需显式运行 `runtime-custody --repair --json`。未知归属、可写解释器或其他路径需要修复 Python 安装，不要放宽校验。
+1.19.14 起，设置窗口用 `WXS-I-PROFILE-*` 区分初始化配置请求或来源校验失败。遇到这类错误，复制设置窗口的诊断摘要；不要因登录成功或同版本在其他机器可用，就认定当前账号的配置校验已经通过。
+
+`wechat-use runtime-custody --json` 检查 Python 文件及祖先目录、实际版本和运行路径。1.19.14 起，命令行初始化发现支持修复的 Python 安装异常时，会通过 Homebrew 尝试一次修复，完成后重新检查；设置窗口也提供“修复读取组件”，或显式运行 `runtime-custody --repair --json`。异常实体目录先备份，支持的目录权限修复保留记录。Homebrew 不可用、归属不明或可写解释器会停止自动修复；不要放宽校验，也不要因此重装微信或清理登录数据。
 
 出现 `WXS-I-SOURCE-LOCK` 或 `not_expected_shared_dms_holder` 时，先正常结束工具任务，再正常退出并重新打开工具专用微信，登录后重试读取。不要手动删除或截断数据库、`-shm` 或 `-wal`；读取仍须通过原来的锁和文件校验。
 
