@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## v1.19.16
+
+- Report actionable initialization failures consistently in settings, CLI JSON and copied diagnostic summaries.
+- State the Python 3.14 requirement and distinguish Homebrew query/install failures from other reader problems.
+
 ## v1.19.15
 
 - 修复小幅签发时间差导致初始化失败的情况：短暂等待后完整复核同一份配置，再继续初始化。
