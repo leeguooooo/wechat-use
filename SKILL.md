@@ -3,13 +3,13 @@ name: wechat-use
 description: "Use WeChat on macOS Apple Silicon or Windows x64: query sessions, contacts and history, listen for messages, and send authorized text. Select the host-specific backend first. Windows has a standalone experimental CLI/MCP package with no system Python requirement; macOS uses the managed WeChat 4.1.9 clone and supports HTTP Bridge/Wechaty."
 metadata:
   author: leeguooooo
-  version: "1.19.15"
+  version: "1.19.16"
   platform: macOS-arm64, Windows-x64-experimental
 ---
 
 # WechatUse — select the host platform first
 
-This skill supports **macOS Apple Silicon and experimental Windows x64**. Never tell a Windows user that WechatUse has no Windows version. Plugin/skill version 1.19.15 is metadata; the runtime releases are independently versioned (macOS v1.19.15, Windows windows-v0.1.0).
+This skill supports **macOS Apple Silicon and experimental Windows x64**. Never tell a Windows user that WechatUse has no Windows version. Plugin/skill version 1.19.16 is metadata; the runtime releases are independently versioned (macOS v1.19.16, Windows windows-v0.1.0).
 
 macOS v1.19.7 fixes custom icon changes with retained older task records. Close the dedicated WeChat normally before changing or restoring its icon; specific refusal reasons are preserved.
 
@@ -204,3 +204,5 @@ wechat-use send --image /absolute/path/image.png --recipient '收件人' --json
 `wechat-use setup` 复用已有登录、激活和有效权限。权限步骤以 `setup --json` 的 `service.accessibility_required` 为准；1.19 public 原生后台路径为 false，使用系统调试接口，不转入旧版辅助功能拖图标流程。日常读取复用已验证的密钥，不要求重启微信或点开图片。
 
 密钥、配置、源消息 XML、账号标识和私有诊断只保存在用户自己的机器；不打印、上传或提交到仓库。不要用 SQLite 直接打开微信原库，不覆盖原库，不清理未知任务的 claim、pending 或输出。
+
+macOS 1.19.16 reports the failed initialization check and a recovery hint in the settings window and copied diagnostic summary. The reader requires Python 3.14. If Homebrew cannot query or install `python@3.14`, update Homebrew with `brew update`, then retry the reader repair. An initialization error alone does not establish macOS incompatibility.
