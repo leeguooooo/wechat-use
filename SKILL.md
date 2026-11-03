@@ -3,13 +3,13 @@ name: wechat-use
 description: "Use WeChat on macOS Apple Silicon or Windows x64: query sessions, contacts and history, listen for messages, and send authorized text. Select the host-specific backend first. Windows has a standalone experimental CLI/MCP package with no system Python requirement; macOS uses the managed WeChat 4.1.9 clone and supports HTTP Bridge/Wechaty."
 metadata:
   author: leeguooooo
-  version: "1.19.16"
+  version: "1.19.17"
   platform: macOS-arm64, Windows-x64-experimental
 ---
 
 # WechatUse — select the host platform first
 
-This skill supports **macOS Apple Silicon and experimental Windows x64**. Never tell a Windows user that WechatUse has no Windows version. Plugin/skill version 1.19.16 is metadata; the runtime releases are independently versioned (macOS v1.19.16, Windows windows-v0.1.0).
+This skill supports **macOS Apple Silicon and experimental Windows x64**. Never tell a Windows user that WechatUse has no Windows version. Plugin/skill version 1.19.17 is metadata; the runtime releases are independently versioned (macOS v1.19.17, Windows windows-v0.1.0).
 
 macOS v1.19.7 fixes custom icon changes with retained older task records. Close the dedicated WeChat normally before changing or restoring its icon; specific refusal reasons are preserved.
 
@@ -76,6 +76,9 @@ This plugin defines **no UserPromptSubmit hook**. A Python-not-found hook error 
 # wechat-use
 
 ## 诊断和读取组件
+
+macOS 1.19.17 fixes twin self-message filtering and bounds network validation to one 2-second request when an unexpired cache is eligible for fallback. Copied diagnostics retain closed query error categories. An unresolved account probe means account identity is unknown; do not assume logout or reset login/data. Issue #102 remains under investigation.
+
 
 1.19.8 起，发送失败的窗口提示和复制诊断保留固定错误码、失败步骤及系统读写错误类别；状态未知时不自动重发。旧版已经省略的错误无法补回。
 
