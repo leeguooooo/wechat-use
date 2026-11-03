@@ -452,7 +452,37 @@ def retirement_pid_absent(pid):
     except OSError:raise Refused('retired target absence unproven') from None
     return False
 
-def retirement_target_exited(pid,expected,boot_ns=None):
+def retirement_kernel_process(pid):
+    """Read kernel PID/start/path, bracketed against instance replacement. No signals."""
+    if sys.platform!='darwin':return None
+    try:
+        import ctypes
+        class BsdInfo(ctypes.Structure):
+            _fields_=[('head',ctypes.c_uint32*12),('comm',ctypes.c_char*16),
+                      ('name',ctypes.c_char*32),('tail',ctypes.c_uint32*6),
+                      ('sec',ctypes.c_uint64),('usec',ctypes.c_uint64)]
+        if ctypes.sizeof(BsdInfo)!=136:return None
+        api=ctypes.CDLL('/usr/lib/libproc.dylib',use_errno=True)
+        api.proc_pidinfo.argtypes=[ctypes.c_int,ctypes.c_int,ctypes.c_uint64,ctypes.c_void_p,ctypes.c_int]
+        api.proc_pidinfo.restype=ctypes.c_int
+        api.proc_pidpath.argtypes=[ctypes.c_int,ctypes.c_void_p,ctypes.c_uint32]
+        api.proc_pidpath.restype=ctypes.c_int
+        def identity():
+            info=BsdInfo()
+            if api.proc_pidinfo(pid,3,0,ctypes.byref(info),136)!=136:return None
+            if info.head[3]!=pid or info.head[1] not in (2,3,4) or info.sec<=0 or info.usec>=1000000:return None
+            return (info.head[3],info.head[5],info.sec,info.usec)
+        before=identity();buffer=ctypes.create_string_buffer(4096)
+        size=api.proc_pidpath(pid,buffer,4096)
+        if before is None or not 0<size<4096:return None
+        path=Path(buffer.value.decode('utf8'))
+        if not path.is_absolute():return None
+        path=str(path.resolve(strict=True));after=identity()
+        if before!=after:return None
+        return (before[2]*1000000000+before[3]*1000,path)
+    except (OSError,ValueError,UnicodeError,AttributeError):return None
+
+def retirement_target_exited(pid,expected,boot_ns=None,expected_executable=None):
     # PID reuse is not original-target survival. This grants SDK administration
     # only; retained evidence and every native-admission flag stay unchanged.
     try:
@@ -475,6 +505,16 @@ def retirement_target_exited(pid,expected,boot_ns=None):
     import datetime
     boot_ns=retirement_boot_ns() if boot_ns is None else boot_ns
     original_ns=int(datetime.datetime(*original,tzinfo=datetime.timezone.utc).timestamp())*1000000000
+    if expected_executable is not None:
+        # A same-boot PID can now name an unrelated program. Require two
+        # stable kernel instances, a different canonical executable AND a
+        # start more than 48h after the recorded target (timezone margin).
+        # The caller still proves managed-App absence and every old binding.
+        first=retirement_kernel_process(pid);second=retirement_kernel_process(pid)
+        if (first is not None and first==second
+                and first[0]>original_ns+48*60*60*1000000000
+                and first[1]!=str(expected_executable)):
+            return True
     if original_ns+48*60*60*1000000000>=boot_ns:return False
     epochs=[]
     for _ in range(2):
@@ -594,11 +634,11 @@ class StoppedTargetRetirement(PrebootRetirement):
                     or self.original_request_target_binding(entry,target,start)),
                 'retained target executable differs from managed selection')
             self.legacy_bound.add((entry.parent.parent,target.get('pid'),start))
-        require(retirement_target_exited(target.get('pid'),start,self.boot),'original target PID still exists')
+        require(retirement_target_exited(target.get('pid'),start,self.boot,self.executable),'original target PID still exists')
     def require_process_exit(self,pid,expected,role):
         if role=='target':
             require(type(expected)is str and 0<len(expected)<=64 and all(32<=ord(c)<127 for c in expected),'retained target epoch invalid')
-            require(retirement_target_exited(pid,expected,self.boot),'original target PID still exists')
+            require(retirement_target_exited(pid,expected,self.boot,self.executable),'original target PID still exists')
         elif role=='parent' and pid in self.approved_parents:
             require(expected==self.approved_parents[pid],'approved parent epoch differs from original plan')
             retirement_process_exited(pid,expected) # also require a determinate kernel epoch/existence probe

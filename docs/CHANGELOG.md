@@ -5,6 +5,7 @@
 - Fix twin self-message recognition and verify cold builds without a separate listener.
 - Bound cached subscription refresh to one 2-second request without extending expiry or bypassing revocation.
 - Preserve sanitized query failure stages and categories in copied diagnostics; avoid treating an unresolved account probe as proof of logout.
+- Recognize long-separated same-boot target PID reuse through stable kernel process identity and canonical executable checks, while retaining original receipt and stopped-target guards.
 - Issue #102 remains open and is not claimed fixed.
 
 ## v1.19.16
