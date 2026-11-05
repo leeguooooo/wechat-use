@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v1.19.18
+
+- Read process start identities directly from the kernel in the worker, eliminating repeated ps subprocesses during image Qt preflight. Pin identity formatting to the system timezone.
+- Mark native download entry only at the actual debugger API boundary, and preserve a verified pre-entry refusal without inventing an unknown submission. Existing pending tasks and permanent claims remain retained.
+- Add bounded, read-only source-reader lock counts to support summaries. Counts do not grant capture readiness or prove login state.
+- Issue #102 remains open; its affected-host capture failure is not claimed fixed.
+
 ## v1.19.17
 
 - Fix twin self-message recognition and verify cold builds without a separate listener.
