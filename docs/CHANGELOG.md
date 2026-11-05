@@ -2,6 +2,7 @@
 
 ## v1.19.18
 
+- Accept a preboot imported namespace when a reboot reuses its old device number, with complete preboot metadata, unchanged current-file fences and original-process/target absence checks. Preserve all historical records and no-replay rules.
 - Read process start identities directly from the kernel in the worker, eliminating repeated ps subprocesses during image Qt preflight. Pin identity formatting to the system timezone.
 - Mark native download entry only at the actual debugger API boundary, and preserve a verified pre-entry refusal without inventing an unknown submission. Existing pending tasks and permanent claims remain retained.
 - Add bounded, read-only source-reader lock counts to support summaries. Counts do not grant capture readiness or prove login state.

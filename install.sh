@@ -531,6 +531,28 @@ class StoppedTargetRetirement(PrebootRetirement):
     # Separate authority from preboot evidence: no age inference or cached
     # certificate. It permits administration only after the exact targets ended.
     PREBOOT=False
+    def retained_namespace_matches(self,binding,worker):
+        if super().retained_namespace_matches(binding,worker):return True
+        m=worker.stat();device=binding.get('namespace_device');inode=binding.get('namespace_inode')
+        cutoff=getattr(self,'cutoff',None)
+        if (type(device)is not int or device!=m.st_dev or type(inode)is not int or inode<=0
+                or inode==m.st_ino or type(cutoff)is not int or worker.name!='worker'
+                or not (worker/'owner-control.json').is_file()):
+            return False
+        # st_dev is a boot/mount-local number, not a durable volume identity.
+        # A migrated namespace can collide with this boot's device number.
+        # Admit that case only as preboot history for stopped-target SDK
+        # administration; retain every literal binding and current-file fence.
+        entry=worker.parent
+        def unreadable(error):raise Refused('preboot imported namespace cannot be fully inspected')
+        for directory,dirs,files in os.walk(entry,followlinks=False,onerror=unreadable):
+            directory=Path(directory);inventory=self.listing(directory)
+            require({item[0] for item in inventory}==set(dirs)|set(files),'preboot imported namespace changed during walk')
+            self.inventories.append((directory,inventory))
+            for path in [directory]+[directory/name for name in dirs+files]:
+                metadata=self.remember(path)
+                if max(metadata.st_mtime_ns,metadata.st_ctime_ns)>=cutoff:return False
+        return True
     def __init__(self,state_roots,verifiers,approved_parents=None):
         super().__init__(state_roots,verifiers)
         self.approved_parents=approved_parents or {}
