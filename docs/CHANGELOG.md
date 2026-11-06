@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v1.19.19
+
+- 设置窗口与命令行默认一次复制完整脱敏诊断，不再以短摘要代替完整证据。
+- 保留初始化进程结果、读取拒绝、全部已采集发送步骤/耗时与崩溃摘要；明确不可用项、历史记录和采集上限。
+- 本地报告保存失败仍可复制，诊断不触发联网续验或发送消息。
+
 ## v1.19.18
 
 - Accept a preboot imported namespace when a reboot reuses its old device number, with complete preboot metadata, unchanged current-file fences and original-process/target absence checks. Preserve all historical records and no-replay rules.

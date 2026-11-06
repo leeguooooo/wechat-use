@@ -3,13 +3,13 @@ name: wechat-use
 description: "Use WeChat on macOS Apple Silicon or Windows x64: query sessions, contacts and history, listen for messages, and send authorized text. Select the host-specific backend first. Windows has a standalone experimental CLI/MCP package with no system Python requirement; macOS uses the managed WeChat 4.1.9 clone and supports HTTP Bridge/Wechaty."
 metadata:
   author: leeguooooo
-  version: "1.19.18"
+  version: "1.19.19"
   platform: macOS-arm64, Windows-x64-experimental
 ---
 
 # WechatUse — select the host platform first
 
-This skill supports **macOS Apple Silicon and experimental Windows x64**. Never tell a Windows user that WechatUse has no Windows version. Plugin/skill version 1.19.18 is metadata; the runtime releases are independently versioned (macOS v1.19.18, Windows windows-v0.1.0).
+This skill supports **macOS Apple Silicon and experimental Windows x64**. Never tell a Windows user that WechatUse has no Windows version. Plugin/skill version 1.19.19 is metadata; the runtime releases are independently versioned (macOS v1.19.19, Windows windows-v0.1.0).
 
 macOS v1.19.7 fixes custom icon changes with retained older task records. Close the dedicated WeChat normally before changing or restoring its icon; specific refusal reasons are preserved.
 
@@ -77,14 +77,14 @@ This plugin defines **no UserPromptSubmit hook**. A Python-not-found hook error 
 
 ## 诊断和读取组件
 
-macOS 1.19.18 removes repeated process-spawn overhead from image download preflight and uses the system timezone for process identities. A preflight refusal before native API entry is no longer reported as unknown submission; existing pending/claim records remain retained. Manual diagnostic summaries include bounded source-reader lock counts. Issue #102 remains under investigation.
+macOS 1.19.19 removes repeated process-spawn overhead from image download preflight and uses the system timezone for process identities. A preflight refusal before native API entry is no longer reported as unknown submission; existing pending/claim records remain retained. Manual diagnostic summaries include bounded source-reader lock counts. Issue #102 remains under investigation.
 
 macOS 1.19.17 fixes twin self-message filtering and bounds network validation to one 2-second request when an unexpired cache is eligible for fallback. Copied diagnostics retain closed query error categories. An unresolved account probe means account identity is unknown; do not assume logout or reset login/data. Issue #102 remains under investigation.
 
 
 1.19.8 起，发送失败的窗口提示和复制诊断保留固定错误码、失败步骤及系统读写错误类别；状态未知时不自动重发。旧版已经省略的错误无法补回。
 
-`wechat-use diagnostics --copy` 复制适合群聊的诊断摘要，完整报告保存在本机；`--copy --full` 明确复制完整报告。摘要不会包含聊天正文或密钥。
+`wechat-use diagnostics --copy` 默认一次复制完整脱敏报告，设置窗口的“复制诊断信息”使用同一采集入口，包含环境、订阅缓存、后台连接、初始化、读取、发送阶段/耗时和崩溃摘要；不可用项、采集上限及历史记录会明确标注。只有显式 `--summary` 才输出短摘要，`--full` 保留兼容。报告不含聊天正文、账号标识、密钥、令牌或用户目录。本地报告保存失败不会阻断复制；不要求用户另行导出文件才提供已有证据。诊断不联网续验订阅，不启动微信、初始化、采集聊天或发送消息。
 
 1.19.14 起，设置窗口用 `WXS-I-PROFILE-*` 区分初始化配置请求或来源校验失败。遇到这类错误，复制设置窗口的诊断摘要；不要因登录成功或同版本在其他机器可用，就认定当前账号的配置校验已经通过。
 
