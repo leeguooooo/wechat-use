@@ -77,7 +77,7 @@ This plugin defines **no UserPromptSubmit hook**. A Python-not-found hook error 
 
 ## 诊断和读取组件
 
-macOS 1.19.19 removes repeated process-spawn overhead from image download preflight and uses the system timezone for process identities. A preflight refusal before native API entry is no longer reported as unknown submission; existing pending/claim records remain retained. Manual diagnostic summaries include bounded source-reader lock counts. Issue #102 remains under investigation.
+macOS 1.19.18 removes repeated process-spawn overhead from image download preflight and uses the system timezone for process identities. A preflight refusal before native API entry is no longer reported as unknown submission; existing pending/claim records remain retained. Manual diagnostic summaries include bounded source-reader lock counts. Issue #102 remains under investigation.
 
 macOS 1.19.17 fixes twin self-message filtering and bounds network validation to one 2-second request when an unexpired cache is eligible for fallback. Copied diagnostics retain closed query error categories. An unresolved account probe means account identity is unknown; do not assume logout or reset login/data. Issue #102 remains under investigation.
 
@@ -86,7 +86,7 @@ macOS 1.19.17 fixes twin self-message filtering and bounds network validation to
 
 `wechat-use diagnostics --copy` 默认一次复制完整脱敏报告，设置窗口的“复制诊断信息”使用同一采集入口，包含环境、订阅缓存、后台连接、初始化、读取、发送阶段/耗时和崩溃摘要；不可用项、采集上限及历史记录会明确标注。只有显式 `--summary` 才输出短摘要，`--full` 保留兼容。报告不含聊天正文、账号标识、密钥、令牌或用户目录。本地报告保存失败不会阻断复制；不要求用户另行导出文件才提供已有证据。诊断不联网续验订阅，不启动微信、初始化、采集聊天或发送消息。
 
-1.19.14 起，设置窗口用 `WXS-I-PROFILE-*` 区分初始化配置请求或来源校验失败。遇到这类错误，复制设置窗口的诊断摘要；不要因登录成功或同版本在其他机器可用，就认定当前账号的配置校验已经通过。
+1.19.14 起，设置窗口用 `WXS-I-PROFILE-*` 区分初始化配置请求或来源校验失败。遇到这类错误，复制设置窗口的诊断信息；不要因登录成功或同版本在其他机器可用，就认定当前账号的配置校验已经通过。
 
 macOS 1.19.15 遇到小幅签发时间差时，会短暂等待并完整复核同一份配置，再继续初始化。若仍报 `WXS-I-PROFILE-CLOCK`，请提供设置窗口诊断摘要和带时区的失败时间；这个错误本身不是“恢复绑定缓存过旧”的证据。
 
