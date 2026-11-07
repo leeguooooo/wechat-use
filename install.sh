@@ -264,7 +264,42 @@ def retirement_process_exited(pid,expected):
         raise Refused('retained process epoch unproven')
     return observed!=expected
 
+def _warm_host_epoch(pid):
+    r=subprocess.run(['/bin/ps','-p',str(pid),'-o','lstart='],capture_output=True,text=True,timeout=3,
+                     env={**os.environ,'LC_ALL':'C','TZ':':/etc/localtime'})
+    return r.stdout.strip() if r.returncode==0 and not r.stderr else None
+
+def retire_warm_lldb_hosts(home=None):
+    """Ask idle warm LLDB send hosts to exit before an SDK/debugger quiet check.
+
+    Only the recorded host pid (same start time, same socket peer) is asked, and
+    a host exits only when nothing is attached. A busy or held host refuses and
+    stays, so the caller's quiet check refuses exactly as for any live debugger.
+    Never signals or kills a process."""
+    import socket
+    base=Path(home or Path.home())/'.wx-rs'
+    roots=[base]
+    try:roots+=[p for p in base.iterdir() if p.is_dir() and not p.is_symlink()]
+    except OSError:pass
+    for root in roots[:4097]:
+        try:hosts=[p for p in (root/'warm-lldb-host').iterdir() if p.is_dir() and not p.is_symlink()]
+        except OSError:continue
+        for host in hosts[:64]:
+            try:
+                record=json.loads((host/'host.json').read_bytes());pid=record['pid'];epoch=record['epoch']
+                if type(pid) is not int or pid<=1 or type(epoch) is not str or _warm_host_epoch(pid)!=epoch:continue
+                with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as conn:
+                    conn.settimeout(5);conn.connect(str(host/'s'))
+                    peer=int.from_bytes(conn.getsockopt(0,0x002,4),'little')  # SOL_LOCAL, LOCAL_PEERPID
+                    if peer!=pid:continue
+                    conn.sendall(b'{"command":"shutdown"}\n');reply=conn.recv(64)
+                if b'"shutdown":true' not in reply:continue
+                deadline=time.time()+10
+                while time.time()<deadline and _warm_host_epoch(pid)==epoch:time.sleep(0.1)
+            except (OSError,ValueError,KeyError,TypeError):continue
+
 def retirement_sdk_quiet():
+    retire_warm_lldb_hosts()
     r=subprocess.run(['/bin/ps','-axo','pid=,comm='],capture_output=True,text=True,timeout=3)
     require(r.returncode==0 and not r.stderr and 0<len(r.stdout)<=4194304,'SDK process inventory unavailable')
     lines=r.stdout.splitlines();require(len(lines)<=8192,'SDK process inventory exceeds bound')

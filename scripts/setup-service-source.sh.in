@@ -274,6 +274,8 @@ def ownership_guard(active,allowed,names):
             if name in watched or name.startswith('lldb'):
                 require(pid in allowed and live[pid]==allowed[pid],'SDK owner/debugger activity prevents repair')
     # Match exact process identities, never whitelist a process name or kill it.
+    # Idle warm LLDB send hosts are asked (never signalled) to exit first.
+    lib['retire_warm_lldb_hosts']()
     quiet();lock_paths=[]
     for account in accounts():
         lib['private_directory'](account)
@@ -384,6 +386,7 @@ def legacy_pause():
             if path.endswith('/Contents/MacOS/WeChat'):
                 state=run(['/bin/ps','-p',str(process),'-o','stat=']).stdout.decode().strip()
                 require(state and state[0] in 'RSI' and not set(state)&set('XTZ'),'WeChat is stopped or traced')
+    lib['retire_warm_lldb_hosts']()
     lib['private_directory'](STATE,create=True)
     with contextlib.ExitStack() as stack:
         for account in accounts():
