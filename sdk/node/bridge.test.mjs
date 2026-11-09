@@ -96,3 +96,17 @@ test('streamMessages can explicitly include self echoes and historical events', 
   assert.equal(new URL(requestedUrl).searchParams.get('since'), '0')
   assert.deepEqual(messages, [{ fromSelf: true, text: 'self' }])
 })
+
+test('streamMessages flattens native batch events and filters self rows', async () => {
+  const body = 'data: {"meta":{"status":"windowed"},"rows":[{"sender_is_self":true,"text":"self"},{"sender_is_self":false,"text":"in1"},{"text":"in2"}]}\n\n'
+  const client = new WechatUseBridgeClient({
+    fetchImpl: async () => new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }),
+  })
+  const messages = []
+  for await (const m of client.streamMessages({ since: 0 })) messages.push(m)
+  assert.deepEqual(messages.map((m) => m.text), ['in1', 'in2'])
+
+  const all = []
+  for await (const m of client.streamMessages({ since: 0, includeSelf: true })) all.push(m)
+  assert.deepEqual(all.map((m) => m.text), ['self', 'in1', 'in2'])
+})
