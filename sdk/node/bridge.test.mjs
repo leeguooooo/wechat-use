@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import {
   AmbiguousSendError,
+  BridgeHttpError,
   WechatUseBridgeClient,
 } from './bridge.mjs'
 
@@ -95,4 +96,73 @@ test('streamMessages can explicitly include self echoes and historical events', 
 
   assert.equal(new URL(requestedUrl).searchParams.get('since'), '0')
   assert.deepEqual(messages, [{ fromSelf: true, text: 'self' }])
+})
+
+test('sendText reports an interrupted success response as ambiguous without retrying', async () => {
+  let calls = 0
+  const cause = new Error('response body connection reset')
+  const client = new WechatUseBridgeClient({
+    fetchImpl: async () => {
+      calls += 1
+      return new Response(new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('{"status":'))
+          controller.error(cause)
+        },
+      }), { status: 200 })
+    },
+  })
+
+  await assert.rejects(
+    client.sendText('filehelper', 'hello'),
+    error => error instanceof AmbiguousSendError && error.ambiguous === true && error.cause === cause,
+  )
+  assert.equal(calls, 1)
+})
+
+test('sendText reports an empty success response as ambiguous without retrying', async () => {
+  for (const status of [200, 204]) {
+    let calls = 0
+    const client = new WechatUseBridgeClient({
+      fetchImpl: async () => {
+        calls += 1
+        return new Response(null, { status })
+      },
+    })
+    await assert.rejects(
+      client.sendText('filehelper', 'hello'),
+      error => error instanceof AmbiguousSendError && error.ambiguous === true,
+    )
+    assert.equal(calls, 1)
+  }
+})
+
+
+test('sendText keeps malformed success JSON ambiguous without retrying', async () => {
+  let calls = 0
+  const client = new WechatUseBridgeClient({
+    fetchImpl: async () => {
+      calls += 1
+      return new Response('{"status":', { status: 200 })
+    },
+  })
+  await assert.rejects(client.sendText('filehelper', 'hello'), AmbiguousSendError)
+  assert.equal(calls, 1)
+})
+
+test('sendText keeps HTTP failures distinct even when their body is unreadable', async () => {
+  let calls = 0
+  const client = new WechatUseBridgeClient({
+    fetchImpl: async () => {
+      calls += 1
+      return new Response(new ReadableStream({
+        start(controller) { controller.error(new Error('body lost')) },
+      }), { status: 503 })
+    },
+  })
+  await assert.rejects(
+    client.sendText('filehelper', 'hello'),
+    error => error instanceof BridgeHttpError && error.status === 503,
+  )
+  assert.equal(calls, 1)
 })
