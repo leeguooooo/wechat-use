@@ -3,13 +3,13 @@ name: wechat-use
 description: "Use WeChat on macOS Apple Silicon or Windows x64: query sessions, contacts and history, listen for messages, and send authorized text. Select the host-specific backend first. Windows has a standalone experimental CLI/MCP package with no system Python requirement; macOS uses the managed WeChat 4.1.9 clone and supports HTTP Bridge/Wechaty."
 metadata:
   author: leeguooooo
-  version: "1.19.19"
+  version: "1.19.24"
   platform: macOS-arm64, Windows-x64-experimental
 ---
 
 # WechatUse — select the host platform first
 
-This skill supports **macOS Apple Silicon and experimental Windows x64**. Never tell a Windows user that WechatUse has no Windows version. Plugin/skill version 1.19.19 is metadata; the runtime releases are independently versioned (macOS v1.19.19, Windows windows-v0.1.0).
+This skill supports **macOS Apple Silicon and experimental Windows x64**. Never tell a Windows user that WechatUse has no Windows version. Plugin/skill version 1.19.24 is metadata; the runtime releases are independently versioned (macOS v1.19.24, Windows windows-v0.1.0).
 
 macOS v1.19.7 fixes custom icon changes with retained older task records. Close the dedicated WeChat normally before changing or restoring its icon; specific refusal reasons are preserved.
 
@@ -99,6 +99,8 @@ macOS 1.19.15 遇到小幅签发时间差时，会短暂等待并完整复核同
 会话、未读和联系人使用独立快照；这些查询成功不代表历史消息完整。工具专用微信在前台时，发送会返回明确的 `wechat_in_foreground`，原请求不会自动重发。
 
 `doctor` 的 `read_pending` 表示快照正在更新或等待读取锁，读取暂未就绪。稍后复查；不要因此重新初始化、重启微信或发送测试消息。真实采集、校验或权限失败仍按故障诊断处理。
+
+macOS 1.19.24 对过期或无效订阅的自动校验增加 5 分钟冷却，避免后台反复联网。手动 `auth status`、`auth sync` 和激活仍可立即执行；已续订但仍显示过期时运行 `wechat-use auth sync`。
 
 ## 安装检查
 
