@@ -143,11 +143,15 @@ export class WechatUseBridgeClient {
       )
     }
 
-    const raw = await readResponseText(response)
-    if (!response.ok) throw new BridgeHttpError(response.status, raw.slice(0, 1024))
+    if (!response.ok) {
+      const raw = await readResponseText(response)
+      throw new BridgeHttpError(response.status, raw.slice(0, 1024))
+    }
 
     try {
-      return parseJson(raw)
+      // A lost or empty success body does not establish the send outcome.
+      // Keep body-read failures inside the same ambiguity boundary as JSON errors.
+      return JSON.parse(await response.text())
     } catch (cause) {
       throw new AmbiguousSendError(
         'wechat-use accepted the send request but its response could not be decoded; do not automatically retry',
