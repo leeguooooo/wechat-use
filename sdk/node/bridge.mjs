@@ -182,9 +182,18 @@ export class WechatUseBridgeClient {
       throw new BridgeHttpError(response.status, raw.slice(0, 1024))
     }
 
-    for await (const message of decodeSse(response.body)) {
-      if (!includeSelf && message?.fromSelf === true) continue
-      yield message
+    for await (const event of decodeSse(response.body)) {
+      // The native bridge emits batches ({ meta, rows: [...] }); older bridges
+      // emit one message per event. Normalize to one yielded message per row.
+      const messages = Array.isArray(event?.rows) ? event.rows : [event]
+      for (const message of messages) {
+        if (!includeSelf && isSelfMessage(message)) continue
+        yield message
+      }
     }
   }
+}
+
+function isSelfMessage(message) {
+  return message?.fromSelf === true || message?.sender_is_self === true
 }
