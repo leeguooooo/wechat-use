@@ -275,10 +275,17 @@ def setup_callers(active,rows,parent_pid):
         callers[outer_pid]=rows[outer_pid]
     return callers
 
+VERIFIER_GENERATIONS=64
 def owner_verifiers(active):
+    # Every upgrade retains its complete suite and nothing prunes old ones, so
+    # a long-lived install can exceed the verifier budget. Refusing then left
+    # the service stopped; use the newest suites (always the active one).
+    # Records none of them can verify stay unknown and still refuse.
     verifiers=[]
-    versions=SDK/'versions';members=list(versions.iterdir());require(len(members)<=64,'SDK generation budget')
-    for directory in members:
+    versions=SDK/'versions';members=list(versions.iterdir());require(len(members)<=4096,'SDK generation inventory bound')
+    suites=sorted((d for d in members if d!=active and d.is_dir() and not d.is_symlink()),
+        key=lambda d:d.lstat().st_mtime_ns,reverse=True)
+    for directory in [active]+suites[:VERIFIER_GENERATIONS-1]:
         if directory.is_dir() and not directory.is_symlink():
             try:
                 lib['load_package'](directory);verifiers.append(directory/'wechat-native-owner')

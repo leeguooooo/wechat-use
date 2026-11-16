@@ -73,6 +73,8 @@ curl -fsSL https://raw.githubusercontent.com/leeguooooo/wechat-use/main/install.
 
 **升级**：`wechat-use upgrade` 校验并原子切换八件程序；`--tag vX.Y.Z`指定版本，`--check`或`--json`只查询。`--rollback`只切换到已保留、可认证的完整SDK。插件和skill副本由原管理器独立更新，SDK升级不会覆盖它们；旧`--skills`会明确拒绝并给出说明。未知任务继续保留，不能通过清记录来强行升级。
 
+1.19.27 修复长期升级后保留的 SDK 版本超过 64 个时“恢复后台”直接拒绝的问题。
+
 1.19.26 放宽初始化身份检查期限，核心数据库还没生成时会等待；`image get` 超出整库快照容量上限时改为逐个消息分片查找；后台拉起失败、发送配置不可用、读取被拒的具体环节会写进诊断。
 
 1.19.25 修复从发布包安装或升级时的 `setup app inventory differs`；重启或迁移到新 Mac 后，已结束的历史发送记录不再阻止升级和“恢复后台”。订阅过期或凭据失效后的自动检查冷却 5 分钟，已续订但仍显示过期时运行 `wechat-use auth sync`。
