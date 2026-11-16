@@ -25,6 +25,9 @@ def closed_failure(error):
     if type(error) is Refused and str(error)=='SDK owner/debugger activity prevents repair':
         result['reason']='sdk_activity_in_progress'
         result['user_facing_zh']='仍有工具任务运行，暂未修复后台。请先正常结束监听或其他工具任务，再重试；不要强制结束微信。'
+    elif type(error) is Refused and str(error)=='managed WeChat running blocks service repair':
+        result['reason']='managed_wechat_running'
+        result['user_facing_zh']='工具微信正在运行，暂时无法恢复后台。请在工具微信里正常退出（⌘Q），再点“恢复后台”；登录和数据都会保留，恢复后重新打开即可。'
     return result
 
 def remaining():
@@ -104,6 +107,21 @@ def verified_source_guard(pid,row,bridge,parent_exit=False):
     live=process_rows().get(pid)
     require(live is not None and live[1:]==row[1:] and live[0] in ((row[0],1) if parent_exit else (row[0],)),'source guard process epoch changed')
 
+def exiting(original,current):
+    # While a process exits, ps loses its executable path and prints the
+    # kernel's 16-byte name in parentheses. Same pid and start time with
+    # exactly that truncated name is the original process on its way out;
+    # it is never signalled and is waited for like any other original role.
+    return current[2]==original[2] and current[1]=='('+Path(original[1]).name[:16]+')'
+
+def same_role(original,current):
+    return current[0] in (original[0],1) and (current[1:]==original[1:] or exiting(original,current))
+
+def left(pid,row):
+    # A short-lived reader may finish on its own while it is inspected.
+    late=process_rows().get(pid)
+    return late is None or exiting(row,late)
+
 def idle_source_guards(rows,bridges):
     # Only the fixed filesystem-only role may outlive an init caller. Native
     # owner/debugger/send roles never enter this admission path.
@@ -114,17 +132,22 @@ def idle_source_guards(rows,bridges):
         require(row[1] in allowed,'orphan reader SDK is not active or registered')
         try:verified_source_guard(pid,row,allowed[row[1]])
         except (OSError,ValueError,RuntimeError):
-            if pid not in process_rows():continue
+            if left(pid,row):continue
             raise
         found[pid]=row
     return found
 
 def service_children(rows,pid,bridge):
     children={}
+    reader=str(bridge.parent/'wechat-snapshot-validator')
     for child,entry in rows.items():
         if entry[0]!=pid:continue
-        if entry[1]==str(bridge.parent/'wechat-snapshot-validator'):
-            verified_source_guard(child,entry,bridge)
+        if exiting((pid,reader,entry[2]),entry):continue
+        if entry[1]==reader:
+            try:verified_source_guard(child,entry,bridge)
+            except (OSError,ValueError,RuntimeError):
+                if left(child,entry):continue
+                raise
         else:require(entry[1]==str(bridge.parent/'wechatd'),'service has an unrecognized live child')
         children[child]=entry
     return children
@@ -177,7 +200,7 @@ def source_guard_children(rows,pid,bridge,parent_exit=False):
         require(row[1]==str(bridge.parent/'wechat-snapshot-validator'),'daemon reader SDK differs')
         try:verified_source_guard(child,row,bridge,parent_exit)
         except (OSError,ValueError,RuntimeError):
-            if child not in process_rows():continue
+            if left(child,row):continue
             raise
         children[child]=row
     return children
@@ -202,26 +225,30 @@ def wait_service_exit(record,allowed,caller=None,orphans=()):
         for parent,original in list(children.items()):
             if Path(original[1]).name!='wechatd' or parent not in live:continue
             current=live[parent]
-            require(current[1:]==original[1:] and current[0] in (original[0],1),'original daemon identity changed during stop')
+            require(same_role(original,current),'original daemon identity changed during stop')
+            if exiting(original,current):continue
             for child,row in source_guard_children(live,parent,Path(current[1]).parent/'wechat-bridge',True).items():
                 if child in children:require(children[child][1:]==row[1:],'reader identity changed during drain')
                 else:children[child]=row;allowed[child]=row
         for pid,original in list(children.items()):
             current=live.get(pid)
             if current is None or pid in signalled:continue
-            require(current[1:]==original[1:] and current[0] in (original[0],1),'original service child identity changed during stop')
+            require(same_role(original,current),'original service child identity changed during stop')
+            if exiting(original,current):continue
             if bridge not in live and job is None:
                 current=process_rows().get(pid)
                 if current is None:continue
-                require(current[1:]==original[1:] and current[0] in (original[0],1),'original service child changed before shutdown')
+                require(same_role(original,current),'original service child changed before shutdown')
+                if exiting(original,current):continue
                 if Path(current[1]).name=='wechat-snapshot-validator':
                     try:verified_source_guard(pid,current,Path(current[1]).parent/'wechat-bridge',True)
                     except (OSError,ValueError,RuntimeError):
-                        if pid not in process_rows():continue
+                        if left(pid,original):continue
                         raise
                 fresh=process_rows().get(pid)
                 if fresh is None:continue
-                require(fresh[1:]==original[1:] and fresh[0] in (original[0],1),'original service child replaced before signal')
+                require(same_role(original,fresh),'original service child replaced before signal')
+                if exiting(original,fresh):continue
                 result=run(['/bin/kill','-TERM',str(pid)],False)
                 require(result.returncode==0 or pid not in process_rows(),'original service child shutdown refused')
                 signalled.add(pid)
@@ -309,9 +336,14 @@ def ownership_guard(active,allowed,names):
                 retired.close();retired=None
                 try:
                     retired=lib['StoppedTargetRetirement']([STATE],verifiers,{pid:row[2] for pid,row in allowed.items()});retired.acquire()
-                except (Refused,OSError,ValueError):
+                except (Refused,OSError,ValueError) as fallback:
                     if retired is not None:retired.close()
                     retired=None
+                    # The stopped-target path is the only one that can admit
+                    # these records; when it refuses only because the managed
+                    # App is open, say so instead of the preboot detail.
+                    if type(fallback) is Refused and str(fallback).startswith('managed WeChat still running'):
+                        raise Refused('managed WeChat running blocks service repair') from original
                     raise original
         held={p for p,_,_ in retired.locks} if retired else set()
         for path in lock_paths:
@@ -526,12 +558,35 @@ def repair(operation="repair"):
             remaining();time.sleep(.05)
     return {'schema':'wechat-use/setup-service-result/v1','status':'service_started','changed':changed,'permissions_verified':False,'data_verified':False}
 
+RESTORED=False
+def restore_after_failure():
+    # A repair that already stopped the bridge must not leave the tool without
+    # its service. Reload whichever registered plist is on disk (the original
+    # or the completed rewrite); never signal processes. Own short budget: the
+    # repair deadline may be what failed.
+    global RESTORED
+    destination=HOME/'Library/LaunchAgents/ai.wechat.bridge.plist'
+    environment={'HOME':str(HOME),'LC_ALL':'C','PATH':'/usr/bin:/bin:/usr/sbin:/sbin'}
+    def loaded():
+        return subprocess.run(['/bin/launchctl','print',LABEL],stdin=subprocess.DEVNULL,capture_output=True,timeout=10,env=environment).returncode==0
+    try:
+        if loaded() or not destination.is_file():return
+        subprocess.run(['/bin/launchctl','bootstrap','gui/'+str(os.getuid()),str(destination)],stdin=subprocess.DEVNULL,capture_output=True,timeout=10,env=environment)
+        RESTORED=loaded()
+    except (OSError,subprocess.SubprocessError):pass
+
 if __name__=='__main__':
     try:
-        with installation_guard():print(json.dumps(repair(sys.argv[1])))
+        with installation_guard():
+            try:print(json.dumps(repair(sys.argv[1])))
+            except Exception:
+                if sys.argv[1]=='repair' and CHANGED:restore_after_failure()
+                raise
     except Exception as error:
         # Only exact fixed categories; never serialize original errors or paths.
-        print(json.dumps(closed_failure(error)),file=sys.stderr);sys.exit(69)
+        result=closed_failure(error)
+        if RESTORED:result['service_restored']=True
+        print(json.dumps(result),file=sys.stderr);sys.exit(69)
 PYSERVICE
     ;;
   *) exit 64 ;;

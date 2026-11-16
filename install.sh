@@ -1175,6 +1175,15 @@ def refresh_setup_entry(root,generation,applications):
             raise
         return 'updated'
 
+def apple_double(tar,member,names,listed):
+    # macOS tar can store extended attributes as AppleDouble "._name" members
+    # (releases v1.19.20-v1.19.23). They are metadata for an adjacent member,
+    # never payload: skip exactly those, still refusing any other extra file.
+    path=Path(member.name)
+    if not (member.isfile() and path.name.startswith('._') and len(path.name)>2 and member.size<=1048576
+            and member.name not in listed and str(path.with_name(path.name[2:])) in names):return False
+    with tar.extractfile(member) as f:return f.read(4)==b'\x00\x05\x16\x07'
+
 def download_package(tag,directory):
     base='https://github.com/leeguooooo/wechat-use/releases/'
     if not tag:
@@ -1196,8 +1205,10 @@ def download_package(tag,directory):
             names.add(member.name)
         inner=tar.extractfile('SHA256SUMS').read(1048577)
         require(inner==external,'archive checksums differ from release asset')
+        listed={line.split('  ',1)[1] for line in inner.decode('utf8').splitlines() if '  ' in line}
         # Safe lexical paths and only regular members; never follow archive links.
         for member in members:
+            if apple_double(tar,member,names,listed):continue
             path=directory/member.name
             if member.isdir():path.mkdir(mode=0o700,parents=True,exist_ok=True);continue
             path.parent.mkdir(mode=0o700,parents=True,exist_ok=True)

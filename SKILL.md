@@ -3,13 +3,13 @@ name: wechat-use
 description: "Use WeChat on macOS Apple Silicon or Windows x64: query sessions, contacts and history, listen for messages, and send authorized text. Select the host-specific backend first. Windows has a standalone experimental CLI/MCP package with no system Python requirement; macOS uses the managed WeChat 4.1.9 clone and supports HTTP Bridge/Wechaty."
 metadata:
   author: leeguooooo
-  version: "1.19.19"
+  version: "1.19.25"
   platform: macOS-arm64, Windows-x64-experimental
 ---
 
 # WechatUse — select the host platform first
 
-This skill supports **macOS Apple Silicon and experimental Windows x64**. Never tell a Windows user that WechatUse has no Windows version. Plugin/skill version 1.19.19 is metadata; the runtime releases are independently versioned (macOS v1.19.19, Windows windows-v0.1.0).
+This skill supports **macOS Apple Silicon and experimental Windows x64**. Never tell a Windows user that WechatUse has no Windows version. Plugin/skill version 1.19.25 is metadata; the runtime releases are independently versioned (macOS v1.19.25, Windows windows-v0.1.0).
 
 macOS v1.19.7 fixes custom icon changes with retained older task records. Close the dedicated WeChat normally before changing or restoring its icon; specific refusal reasons are preserved.
 
@@ -99,6 +99,8 @@ macOS 1.19.15 遇到小幅签发时间差时，会短暂等待并完整复核同
 会话、未读和联系人使用独立快照；这些查询成功不代表历史消息完整。工具专用微信在前台时，发送会返回明确的 `wechat_in_foreground`，原请求不会自动重发。
 
 `doctor` 的 `read_pending` 表示快照正在更新或等待读取锁，读取暂未就绪。稍后复查；不要因此重新初始化、重启微信或发送测试消息。真实采集、校验或权限失败仍按故障诊断处理。
+
+macOS 1.19.25 起，从发布包安装或升级不再报 `setup app inventory differs`。重启或迁移到新 Mac 后，已结束的历史发送记录不再阻止升级和恢复后台。工具微信运行时“恢复后台”会提示先正常退出，不要强制结束微信。过期或无效订阅的自动校验冷却 5 分钟，已续订但仍显示过期时运行 `wechat-use auth sync`。
 
 ## 安装检查
 
