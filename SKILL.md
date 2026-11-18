@@ -3,13 +3,13 @@ name: wechat-use
 description: "Use WeChat on macOS Apple Silicon or Windows x64: query sessions, contacts and history, listen for messages, and send authorized text. Select the host-specific backend first. Windows has a standalone experimental CLI/MCP package with no system Python requirement; macOS uses the managed WeChat 4.1.9 clone and supports HTTP Bridge/Wechaty."
 metadata:
   author: leeguooooo
-  version: "1.19.28"
+  version: "1.19.29"
   platform: macOS-arm64, Windows-x64-experimental
 ---
 
 # WechatUse — select the host platform first
 
-This skill supports **macOS Apple Silicon and experimental Windows x64**. Never tell a Windows user that WechatUse has no Windows version. Plugin/skill version 1.19.28 is metadata; the runtime releases are independently versioned (macOS v1.19.28, Windows windows-v0.1.0).
+This skill supports **macOS Apple Silicon and experimental Windows x64**. Never tell a Windows user that WechatUse has no Windows version. Plugin/skill version 1.19.29 is metadata; the runtime releases are independently versioned (macOS v1.19.29, Windows windows-v0.1.0).
 
 macOS v1.19.7 fixes custom icon changes with retained older task records. Close the dedicated WeChat normally before changing or restoring its icon; specific refusal reasons are preserved.
 
@@ -73,7 +73,7 @@ This plugin defines **no UserPromptSubmit hook**. A Python-not-found hook error 
 
 # macOS only: stable CLI
 
-macOS 1.19.28 adds explicit login compatibility recovery. If the managed WeChat reports its version is too old, use the setup window’s “修复登录兼容” action, or `wechat-use login-compat --apply`. Default `login-compat --json` only inspects; `--restore` restores the same process using its local record. This is a temporary, signed-profile-gated change: restarting WeChat discards it. The user performs login confirmation. Never auto-retry an unknown repair outcome, claim login from a repair receipt, or apply this to the primary WeChat.
+macOS 1.19.29 adds explicit login compatibility recovery. If the managed WeChat reports its version is too old, use the setup window’s “修复登录兼容” action, or `wechat-use login-compat --apply`. Default `login-compat --json` only inspects; `--restore` restores the same process using its local record. This is a temporary, signed-profile-gated change: restarting WeChat discards it. The user performs login confirmation. Never auto-retry an unknown repair outcome, claim login from a repair receipt, or apply this to the primary WeChat.
 
 
 # wechat-use
