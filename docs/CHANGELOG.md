@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v1.19.34
+
+- 新增聊天附件和视频下载：`wechat-use file get` / `video get`、MCP `wechat_get_file` / `wechat_get_video`、bridge `GET /file` / `/video`、REST `/v1/file` / `/v1/video`；Wechaty 附件、视频消息可取到文件；读取结果附带 `media.file_ref` / `media.video_ref`（只给引用，不自动下载）。
+- 本地已有的文件直接使用；否则由专用微信在后台下载，不需要点开消息，完成后按消息里的 MD5 和大小校验。下载能力由服务端签名下发（`media-download-v1`），与图片下载的授权分开。
+- 微信新格式的大文件暂不支持后台下载，会明确提示：在专用微信里点一次下载，之后用 `file get` 从本地取。
+
 ## v1.19.33
 
 - 专用微信刚登录时，准备本地数据遇到暂时性失败（找不到读取密钥 `WXS-I-KEYS`、账号文件未就绪、扫描超时等）会自动退避重试（约 7 分钟，被动读取、不重启微信），期间显示进行中；仍失败才显示问题。

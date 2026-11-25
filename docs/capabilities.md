@@ -39,6 +39,7 @@
 | 收藏 | 当前读取范围未开放 | `favorites` 保留命令 | 收藏资源未接入聊天快照与精确消息取图，不能伪造聊天引用下载 |
 | 统计 | ✅ v1.2 | `wechat-use stats <chat>` | 活跃度 / 发言人 / 时段 |
 | 聊天图片与原图 | ✅ v1.19 | `wechat-use image get <localId> --chat <id> --server-id <exactId>` | 验证缓存与签名原生下载；完整 XML MD5 校验，不需要先在 UI 点图。TP/HTTP 等未认证资源返回不可用 |
+| 聊天附件 / 视频 | ✅ v1.19.34 | `wechat-use file get` / `video get` <localId> --chat <id> --server-id <exactId> | 先用本地文件，否则由专用微信后台下载，完成后按 MD5 和大小校验；新格式大文件需先在专用微信里点一次下载 |
 | 收语音（raw SILK_V3） | ✅ v1.13.21 | `wechat-use audio get <svr_id>` | 本地纯读，落 `~/.wechat/audio-cache/<svr_id>.silk` |
 | 语音转文字（whisper.cpp + SILK pipeline） | ✅ v1.13.25 | `wechat-use audio setup` + `wechat-use audio transcribe <svr_id>` | `setup` 一次性装齐 ffmpeg / whisper-cpp / kn007 silk-decoder / 默认 medium 模型(1.5GB,中文准度好);`transcribe` 一条龙跑 silk → 16kHz wav → whisper。`--json` 默认 `transcriptRedacted: true` 不出文字防 agent log 外泄,`--include-transcript` 才出 |
 | **history 自动转写语音** | ✅ v1.13.25-28 | `wechat-use history <chat>` (默认) | agent 看群历史时,语音消息自动转成文字塞进 `display_text` + `media.transcript`,**告别 `[语音消息]` 占位破上下文**。SHA-256 内容寻址 cache 二次访问 0.4s 全 hit(`pipeline_version` 进 cache key v1.13.26+,tool 升级自动 invalidate);`media.transcript_status` 字段诊断(`cached` / `transcribed` / `no_deps` / `failed` / `skipped_svr_id_zero` / `invalid_input`);`--no-transcribe` opt-out / `--transcribe-model small` 切小模型 / `--quiet` 静默 stderr(JSON 模式自动开)。`wechat-use doctor` 拆 `audio_transcribe_setup`(总 ok)+ `audio_transcribe_default_model`(ok 反映现实)两行 v1.13.27+ |
