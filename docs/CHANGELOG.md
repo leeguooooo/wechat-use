@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## v1.19.35
+
+- 聊天记录很多的账号，读取不再因为超出快照容量（`WXS-READ-UNAVAILABLE`，`byte_budget`）整体失败：后台只复制联系人、会话和最近写入的消息分片，收消息和最近记录照常可用；`history` 条数不够时分批读取更早的分片并按时间合并，仍没读到的分片写在结果的 `meta.unavailable_shards` 里，不标为完整。诊断摘要新增 `omitted_shards`。
+- 发送时调试器挂接专用微信卡住，或停在不再执行发送的保留状态，后台会自动放开专用微信，不再需要重启电脑。能证明还没开始发送的请求，`wechat-use send-receipt` 的回执由 `unknown` 改为 `not_submitted`。超时提示改为指向原请求的回执。
+
 ## v1.19.34
 
 - 新增聊天附件和视频下载：`wechat-use file get` / `video get`、MCP `wechat_get_file` / `wechat_get_video`、bridge `GET /file` / `/video`、REST `/v1/file` / `/v1/video`；Wechaty 附件、视频消息可取到文件；读取结果附带 `media.file_ref` / `media.video_ref`（只给引用，不自动下载）。
